@@ -2,6 +2,54 @@
 
 基于 **Cloudflare Workers + D1** 的轻量 VPS 监控面板：一个 Worker、一个数据库、一行命令装探针，零服务器成本。
 
+**免费**：Cloudflare 免费套餐即可跑 10 台以内的 VPS，无需信用卡。
+
+## 🚀 一键部署（手机上 5 分钟搞定）
+
+不需要电脑、不需要装任何软件，全部在浏览器里点：
+
+### 第 1 步：Fork 本仓库
+
+点本页右上角 **Fork** → **Create fork**，把仓库复制到你自己的账号下。
+
+### 第 2 步：拿两个 Cloudflare 凭证
+
+需要提前注册好 [Cloudflare](https://dash.cloudflare.com/sign-up) 账号（免费）。
+
+1. **API Token**：打开 <https://dash.cloudflare.com/profile/api-tokens>
+   → **Create Token** → 找到 **Edit Cloudflare Workers** 模板点 **Use template**
+   → 权限里确认有 **Account → D1 → Edit**（没有就点 *+ Add additional* 补上）
+   → **Continue to summary** → **Create Token** → 复制保存。
+2. **Account ID**：打开 <https://dash.cloudflare.com> → 点进 **Workers & Pages**
+   → 右侧栏复制 **Account ID**。
+
+### 第 3 步：在 Fork 的仓库里填 Secrets
+
+进你 Fork 的仓库 → **Settings** → **Secrets and variables** → **Actions** → **New repository secret**，添加三条：
+
+| Name | 内容 |
+|---|---|
+| `CF_API_TOKEN` | 第 2 步的 API Token |
+| `CF_ACCOUNT_ID` | 第 2 步的 Account ID |
+| `ADMIN_TOKEN` | 自己编一个强密码，用来登录仪表盘和加机器 |
+
+### 第 4 步：点一下部署
+
+仓库 → **Actions** → （首次会提示，点 *I understand my workflows, go ahead and enable them*）
+→ 左侧选 **Deploy to Cloudflare** → 右侧 **Run workflow** → **Run workflow**。
+
+等 1~2 分钟变绿勾 ✅，部署完成。打开最后几步日志里出现的
+`https://vps-radar.<子域>.workers.dev`，就是你的监控面板。
+
+> 以后再点一次 Run workflow 就是更新部署，D1 数据库和表结构会自动复用，数据不丢。
+
+### 第 5 步：接入 VPS
+
+手机浏览器打开面板 → 右上角 **+ 添加服务器** → 复制弹出的一键命令，
+用任意 SSH App（Termius / Shelly / WebSSH 都行）登录你的 VPS 粘贴执行，几秒后面板上就出现这台机器。
+
+---
+
 ## 功能
 
 - 仪表盘：CPU / 内存 / 磁盘 / 实时网速 / 累计流量 / 在线状态，10 秒自动刷新
@@ -9,31 +57,6 @@
 - 探针：纯 bash + /proc，systemd 常驻，资源占用可忽略
 - 管理：网页内添加/删除服务器，添加后直接给出该机的**一键安装命令**
 - 数据保留期、离线判定阈值均可配置
-
-## 部署
-
-```bash
-npm i -g wrangler
-wrangler login
-
-# 1. 建库，把返回的 database_id 填进 wrangler.toml
-npx wrangler d1 create vps-radar
-
-# 2. 初始化表结构
-npx wrangler d1 execute vps-radar --remote --file=schema.sql
-
-# 3. 设置管理令牌（仪表盘登录 + 管理 API）
-npx wrangler secret put ADMIN_TOKEN
-
-# 4. 发布
-npx wrangler deploy
-```
-
-打开 `https://vps-radar.<你的子域>.workers.dev`，右上角「+ 添加服务器」，复制给出的一键命令到目标 VPS 执行：
-
-```bash
-bash <(curl -fsSL https://你的域名/agent.sh) https://你的域名 <SERVER_ID> <TOKEN>
-```
 
 ## 配置（wrangler.toml `[vars]`）
 
@@ -44,7 +67,10 @@ bash <(curl -fsSL https://你的域名/agent.sh) https://你的域名 <SERVER_ID
 | `OFFLINE_AFTER` | `"120"` | 超过该秒数未上报判定离线 |
 | `SITE_TITLE` | `VPS Radar` | 页面标题 |
 
-历史清理：在 `wrangler.toml` 追加 `[triggers]` 段开启定时清理（可选，不开则只增不删）：
+改法：直接在 GitHub 网页上编辑 `wrangler.toml` 提交，然后到 Actions 再跑一次
+**Deploy to Cloudflare** 即可，不用碰命令行。
+
+历史清理：在 `wrangler.toml` 追加下面这段（同样改完重新跑一次部署），开启每天定时清理过期数据：
 
 ```toml
 [triggers]
@@ -62,6 +88,16 @@ crons = ["0 * * * *"]
 | DELETE | `/api/servers/:id` | Admin | 删除机器及历史 |
 | PATCH | `/api/servers/:id` | Admin | 改名 `{name}` |
 | POST | `/api/login` | — | `{token}` 换取管理 cookie |
+
+## 电脑手动部署（可选）
+
+```bash
+npm i -g wrangler && wrangler login
+npx wrangler d1 create vps-radar            # 把 database_id 填进 wrangler.toml
+npx wrangler d1 execute vps-radar --remote --file=schema.sql
+npx wrangler secret put ADMIN_TOKEN
+npx wrangler deploy
+```
 
 ## 卸载探针
 
