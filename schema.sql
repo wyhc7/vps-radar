@@ -5,6 +5,11 @@ CREATE TABLE IF NOT EXISTS servers (
   token       TEXT NOT NULL,
   os          TEXT NOT NULL DEFAULT '',
   ip          TEXT NOT NULL DEFAULT '',
+  price       TEXT NOT NULL DEFAULT '',   -- 自由文本，如 "¥299/年"
+  expire_at   INTEGER NOT NULL DEFAULT 0, -- 到期时间戳，0 = 未设置
+  alert_offline INTEGER NOT NULL DEFAULT 0,
+  notified_7d INTEGER NOT NULL DEFAULT 0,
+  notified_3d INTEGER NOT NULL DEFAULT 0,
   created_at  INTEGER NOT NULL
 );
 

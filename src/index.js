@@ -49,6 +49,80 @@ function tokenHashSync(s) {
 const NUM_FIELDS = ['cpu', 'load1', 'mem_total', 'mem_used', 'swap_total', 'swap_used',
   'disk_total', 'disk_used', 'net_rx', 'net_tx', 'uptime', 'net_rx_total', 'net_tx_total'];
 
+// 旧库升级：列已存在时 ALTER 会报错，直接忽略（schema.sql 已含新库完整结构）
+let schemaReady = false;
+async function ensureSchema(env) {
+  if (schemaReady) return;
+  schemaReady = true;
+  const alters = [
+    "ALTER TABLE servers ADD COLUMN price TEXT NOT NULL DEFAULT ''",
+    'ALTER TABLE servers ADD COLUMN expire_at INTEGER NOT NULL DEFAULT 0',
+    'ALTER TABLE servers ADD COLUMN alert_offline INTEGER NOT NULL DEFAULT 0',
+    'ALTER TABLE servers ADD COLUMN notified_7d INTEGER NOT NULL DEFAULT 0',
+    'ALTER TABLE servers ADD COLUMN notified_3d INTEGER NOT NULL DEFAULT 0',
+  ];
+  for (const sql of alters) {
+    try { await env.DB.prepare(sql).run(); } catch { /* 列已存在 */ }
+  }
+}
+
+// 通知通道：Telegram Bot 和 Bark 配了哪个用哪个，都配就都发
+async function notify(env, text) {
+  const jobs = [];
+  if (env.TG_BOT_TOKEN && env.TG_CHAT_ID) {
+    jobs.push(fetch(`https://api.telegram.org/bot${env.TG_BOT_TOKEN}/sendMessage`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ chat_id: env.TG_CHAT_ID, text }),
+    }).catch(() => {}));
+  }
+  if (env.BARK_KEY) {
+    const barkServer = env.BARK_SERVER || 'https://api.day.app';
+    jobs.push(fetch(`${barkServer}/${env.BARK_KEY}/${encodeURIComponent('VPS Radar')}/${encodeURIComponent(text)}`)
+      .catch(() => {}));
+  }
+  await Promise.all(jobs);
+}
+
+const fmtDate = ts => new Date(ts * 1000).toISOString().slice(0, 10);
+
+// 每分钟由 cron 调用：离线/恢复预警 + 到期前 7 天、3 天提醒
+async function checkAlerts(env) {
+  const offlineAfter = Number(env.OFFLINE_AFTER || 120);
+  const t = now();
+  const { results: servers } = await env.DB.prepare(
+    'SELECT id, name, expire_at, alert_offline, notified_7d, notified_3d FROM servers').all();
+  const { results: latest } = await env.DB.prepare('SELECT server_id, ts FROM latest').all();
+  const lastTs = Object.fromEntries(latest.map(r => [r.server_id, r.ts]));
+
+  const stmts = [];
+  for (const s of servers) {
+    const label = s.name || s.id.slice(0, 8);
+    const last = lastTs[s.id] || 0;
+    const isOffline = last > 0 && t - last > offlineAfter;
+
+    if (isOffline && !s.alert_offline) {
+      await notify(env, `🔴 离线预警：${label} 已超过 ${offlineAfter} 秒未上报`);
+      stmts.push(env.DB.prepare('UPDATE servers SET alert_offline = 1 WHERE id = ?').bind(s.id));
+    } else if (!isOffline && s.alert_offline && last > 0) {
+      await notify(env, `🟢 恢复上线：${label} 已恢复上报`);
+      stmts.push(env.DB.prepare('UPDATE servers SET alert_offline = 0 WHERE id = ?').bind(s.id));
+    }
+
+    if (s.expire_at > 0) {
+      const daysLeft = (s.expire_at - t) / 86400;
+      if (daysLeft <= 3 && !s.notified_3d) {
+        await notify(env, `⚠️ 到期提醒：${label} 将于 ${fmtDate(s.expire_at)} 到期，仅剩 ${Math.max(0, Math.ceil(daysLeft))} 天`);
+        stmts.push(env.DB.prepare('UPDATE servers SET notified_3d = 1 WHERE id = ?').bind(s.id));
+      } else if (daysLeft <= 7 && !s.notified_7d) {
+        await notify(env, `⚠️ 到期提醒：${label} 将于 ${fmtDate(s.expire_at)} 到期，仅剩 7 天`);
+        stmts.push(env.DB.prepare('UPDATE servers SET notified_7d = 1 WHERE id = ?').bind(s.id));
+      }
+    }
+  }
+  if (stmts.length) await env.DB.batch(stmts);
+}
+
 async function handleReport(req, env) {
   const body = await req.json().catch(() => null);
   if (!body || typeof body !== 'object') return json({ error: 'bad json' }, 400);
@@ -92,7 +166,7 @@ async function handleReport(req, env) {
 async function handleList(env) {
   const offline = Number(env.OFFLINE_AFTER || 120);
   const { results } = await env.DB.prepare(`
-    SELECT s.id, s.name, s.os, s.ip, l.*
+    SELECT s.id, s.name, s.os, s.ip, s.price, s.expire_at, l.*
     FROM servers s JOIN latest l ON l.server_id = s.id
     ORDER BY s.name`).all();
   const t = now();
@@ -139,6 +213,7 @@ async function purgeOld(env) {
 
 export default {
   async fetch(req, env) {
+    await ensureSchema(env);
     const url = new URL(req.url);
     const p = url.pathname;
 
@@ -180,8 +255,14 @@ export default {
     if (dm && req.method === 'PATCH') {
       if (!isAdmin(req, env, url)) return json({ error: 'unauthorized' }, 401);
       const body = await req.json().catch(() => ({}));
-      await env.DB.prepare('UPDATE servers SET name = ? WHERE id = ?')
-        .bind(String(body.name || '').slice(0, 64), dm[1]).run();
+      const cur = await env.DB.prepare('SELECT expire_at FROM servers WHERE id = ?').bind(dm[1]).first();
+      if (!cur) return json({ error: 'unknown server' }, 404);
+      const expireAt = Number(body.expire_at) || 0;
+      // 到期日变化时重置提醒标记，新一轮 7 天/3 天提醒会重新触发
+      const reset = expireAt !== cur.expire_at ? ', notified_7d = 0, notified_3d = 0' : '';
+      await env.DB.prepare(`UPDATE servers SET name = ?, price = ?, expire_at = ?${reset} WHERE id = ?`)
+        .bind(String(body.name || '').slice(0, 64), String(body.price || '').slice(0, 32),
+          expireAt, dm[1]).run();
       return json({ ok: true });
     }
 
@@ -205,8 +286,10 @@ export default {
     return json({ error: 'not found' }, 404);
   },
 
-  // wrangler.toml 加 [triggers] crons = ["0 * * * *"] 可启用定期清理
+  // 每分钟 cron：预警检查；整点顺带清理过期历史
   async scheduled(_evt, env) {
-    await purgeOld(env);
+    await ensureSchema(env);
+    await checkAlerts(env);
+    if (new Date().getUTCMinutes() === 0) await purgeOld(env);
   },
 };

@@ -36,6 +36,23 @@ jobs:
       - name: Set ADMIN_TOKEN secret
         run: echo -n "${{ secrets.ADMIN_TOKEN }}" | npx wrangler secret put ADMIN_TOKEN
 
+      # 可选：配置了这两个 Secrets 才启用 Telegram 预警
+      - name: Set Telegram secrets (optional)
+        if: ${{ env.TG_BOT_TOKEN != '' && env.TG_CHAT_ID != '' }}
+        env:
+          TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
+          TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
+        run: |
+          echo -n "$TG_BOT_TOKEN" | npx wrangler secret put TG_BOT_TOKEN
+          echo -n "$TG_CHAT_ID" | npx wrangler secret put TG_CHAT_ID
+
+      # 可选：配置了 BARK_KEY 才启用 Bark（iOS）预警
+      - name: Set Bark secret (optional)
+        if: ${{ env.BARK_KEY != '' }}
+        env:
+          BARK_KEY: ${{ secrets.BARK_KEY }}
+        run: echo -n "$BARK_KEY" | npx wrangler secret put BARK_KEY
+
       - name: Deploy worker
         run: npx wrangler deploy
 

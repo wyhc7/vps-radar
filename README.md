@@ -33,6 +33,14 @@
 | `CF_ACCOUNT_ID` | 第 2 步的 Account ID |
 | `ADMIN_TOKEN` | 自己编一个强密码，用来登录仪表盘和加机器 |
 
+**可选**（不配就没有通知功能，其余一切正常）：
+
+| Name | 内容 |
+|---|---|
+| `TG_BOT_TOKEN` | Telegram 机器人 Token：TG 里找 @BotFather → /newbot 拿到 |
+| `TG_CHAT_ID` | 接收通知的聊天 ID：先给你的机器人发条消息，再访问 `https://api.telegram.org/bot<TOKEN>/getUpdates` 看 `chat.id` |
+| `BARK_KEY` | iOS Bark 推送 Key（Bark App 首页那串），与 Telegram 二选一或都配 |
+
 ### 第 4 步：点一下部署
 
 仓库 → **Actions** → （首次会提示，点 *I understand my workflows, go ahead and enable them*）
@@ -45,8 +53,16 @@
 
 ### 第 5 步：接入 VPS
 
-手机浏览器打开面板 → 右上角 **+ 添加服务器** → 复制弹出的一键命令，
+手机浏览器打开面板 → 右上角 **🔑 登录管理** 输入 `ADMIN_TOKEN` → **+ 添加服务器** → 复制弹出的一键命令，
 用任意 SSH App（Termius / Shelly / WebSSH 都行）登录你的 VPS 粘贴执行，几秒后面板上就出现这台机器。
+
+### 第 6 步：设置价格和到期日（可选）
+
+点卡片上的 **编辑**，依次填备注名、价格（如 `¥299/年`）、到期日期（`2027-03-15`）。
+填完后：卡片显示价格和到期倒计时（7 天内变黄、3 天内变红）；配了 Telegram/Bark 的话，
+到期前 7 天和前 3 天会各收到一次提醒，机器离线和恢复也会推送。
+
+> 续费后重新编辑到期日期即可，提醒会自动重置。
 
 ---
 
@@ -54,8 +70,11 @@
 
 - 仪表盘：CPU / 内存 / 磁盘 / 实时网速 / 累计流量 / 在线状态，10 秒自动刷新
 - 点击任意机器查看 24 小时历史曲线（CPU、内存、上下行流量）
+- **预警通知**：机器离线/恢复时推送 Telegram 或 Bark（iOS）通知
+- **到期提醒**：给每台机器设置到期日期后，前 7 天和前 3 天各推送一次提醒
+- **价格展示**：卡片上直接显示每台机器的价格和到期倒计时
 - 探针：纯 bash + /proc，systemd 常驻，资源占用可忽略
-- 管理：网页内添加/删除服务器，添加后直接给出该机的**一键安装命令**
+- 管理：网页内添加/编辑/删除服务器，添加后直接给出该机的**一键安装命令**
 - 数据保留期、离线判定阈值均可配置
 
 ## 配置（wrangler.toml `[vars]`）
@@ -70,12 +89,7 @@
 改法：直接在 GitHub 网页上编辑 `wrangler.toml` 提交，然后到 Actions 再跑一次
 **Deploy to Cloudflare** 即可，不用碰命令行。
 
-历史清理：在 `wrangler.toml` 追加下面这段（同样改完重新跑一次部署），开启每天定时清理过期数据：
-
-```toml
-[triggers]
-crons = ["0 * * * *"]
-```
+历史数据和预警由 cron 每分钟驱动（默认已开启 `* * * * *`），整点自动清理过期历史，无需配置。
 
 ## API
 
@@ -86,7 +100,7 @@ crons = ["0 * * * *"]
 | GET | `/api/history/:id?hours=24` | 视配置 | 历史曲线 |
 | POST | `/api/servers` | Admin | 创建机器，返回 id+token |
 | DELETE | `/api/servers/:id` | Admin | 删除机器及历史 |
-| PATCH | `/api/servers/:id` | Admin | 改名 `{name}` |
+| PATCH | `/api/servers/:id` | Admin | 编辑 `{name, price, expire_at}` |
 | POST | `/api/login` | — | `{token}` 换取管理 cookie |
 
 ## 电脑手动部署（可选）

@@ -100,10 +100,23 @@ c.lineTo(w,h);c.lineTo(0,h);c.closePath();c.fillStyle=stroke+'22';c.fill();
 function card(s){
 const mem=pct(s.mem_used,s.mem_total),dsk=pct(s.disk_used,s.disk_total);
 const t=new Date(s.ts*1000).toLocaleTimeString();
+let info='';
+if(s.price||s.expire_at){
+  info='<div class="meta">';
+  if(s.price)info+='💰 '+esc(s.price);
+  if(s.expire_at){
+    const days=Math.ceil((s.expire_at*1000-Date.now())/86400000);
+    const c=days<=3?'var(--bad)':days<=7?'var(--warn)':'var(--dim)';
+    info+=(s.price?' · ':'')+'<span style="color:'+c+'">📅 '+new Date(s.expire_at*1000).toISOString().slice(0,10)
+      +' 到期'+(days>=0?'（剩 '+days+' 天）':'（已过期）')+'</span>';
+  }
+  info+='</div>';
+}
 return '<div class="card'+(s.online?'':' off')+'" data-id="'+s.id+'">'
 +'<div class="row"><span class="name"><i class="dot '+(s.online?'on':'offd')+'"></i>'
 +esc(s.name||s.id.slice(0,8))+'</span></div>'
 +'<div class="meta">'+esc(s.os||'-')+' · '+esc(s.ip||'-')+' · up '+fmtUp(s.uptime)+'</div>'
++info
 +'<div class="lbl"><span>CPU '+s.cpu.toFixed(1)+'%</span><span>load '+s.load1.toFixed(2)+'</span></div>'
 +'<div class="bar"><i style="width:'+s.cpu+'%;background:'+color(s.cpu)+'"></i></div>'
 +'<div class="lbl"><span>内存 '+fmtB(s.mem_used)+' / '+fmtB(s.mem_total)+'</span><span>'+mem.toFixed(0)+'%</span></div>'
@@ -114,7 +127,7 @@ return '<div class="card'+(s.online?'':' off')+'" data-id="'+s.id+'">'
 +'<div class="lbl"><span>累计 ↓ '+fmtB(s.net_rx_total)+' ↑ '+fmtB(s.net_tx_total)+'</span></div>'
 +'<canvas class="spark"></canvas>'
 +'<div class="up">'+t+'</div>'
-+(ADMIN?'<button class="del danger">删除</button>':'')
++(ADMIN?'<button class="edit" style="position:absolute;bottom:12px;right:64px;font-size:11px;padding:2px 8px">编辑</button><button class="del danger">删除</button>':'')
 +'</div>';
 }
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -127,11 +140,28 @@ grid.innerHTML=d.servers.length?d.servers.map(card).join(''):'<div class="empty"
 // 点击卡片看历史 / 删除
 grid.querySelectorAll('.card').forEach(c=>{
 c.addEventListener('click',async ev=>{
+const s=(lastList.servers||[]).find(x=>x.id===c.dataset.id);
 if(ev.target.classList.contains('del')){
 if(!confirm('删除该服务器及其全部历史？'))return;
 await fetch('/api/servers/'+c.dataset.id,{method:'DELETE'});load();return;
 }
-const s=(lastList.servers||[]).find(x=>x.id===c.dataset.id);
+if(ev.target.classList.contains('edit')){
+if(!s)return;
+const name=prompt('备注名:',s.name||'');if(name===null)return;
+const price=prompt('价格（自由文本，如 ¥299/年，留空不显示）:',s.price||'');if(price===null)return;
+const cur=s.expire_at?new Date(s.expire_at*1000).toISOString().slice(0,10):'';
+const exp=prompt('到期日期（YYYY-MM-DD，留空清除）:',cur);if(exp===null)return;
+let expire_at=0;
+if(exp.trim()){
+const d=new Date(exp.trim()+'T23:59:59Z');
+if(isNaN(d)){alert('日期格式不对');return}
+expire_at=Math.floor(d.getTime()/1000);
+}
+await fetch('/api/servers/'+c.dataset.id,{method:'PATCH',
+headers:{'content-type':'application/json'},
+body:JSON.stringify({name,price,expire_at})});
+load();return;
+}
 if(s)openDetail(s);
 });
 });
