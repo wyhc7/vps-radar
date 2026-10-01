@@ -21,10 +21,13 @@ TOKEN="$TOKEN"
 INTERVAL=10
 EOF
   chmod 600 "$CONF"
-  cp "$0" "$BIN" && chmod +x "$BIN" || {
-    # 通过 stdin 执行（bash <(curl ...)）时 $0 不可复制，重新下载
-    curl -fsSL "$URL/agent.sh" -o "$BIN" && chmod +x "$BIN"
-  }
+  # 本地文件执行时直接复制；管道执行（bash <(curl ...)）时 $0 是已读空的
+  # /dev/fd/63，复制会拿到空文件，必须校验后回退到重新下载
+  cp "$0" "$BIN" 2>/dev/null
+  if ! head -c2 "$BIN" 2>/dev/null | grep -q '#!'; then
+    curl -fsSL "$URL/agent.sh" -o "$BIN" || { echo "下载探针失败"; exit 1; }
+  fi
+  chmod +x "$BIN"
   cat > "$UNIT" <<EOF
 [Unit]
 Description=vps-radar agent
