@@ -66,7 +66,7 @@ async function ensureSchema(env) {
   }
 }
 
-// 通知通道：Telegram Bot 和 Bark 配了哪个用哪个，都配就都发
+// 通知通道：Telegram / Bark / Server酱 / Pushplus，配了哪个用哪个，都配就都发
 async function notify(env, text) {
   const jobs = [];
   if (env.TG_BOT_TOKEN && env.TG_CHAT_ID) {
@@ -80,6 +80,20 @@ async function notify(env, text) {
     const barkServer = env.BARK_SERVER || 'https://api.day.app';
     jobs.push(fetch(`${barkServer}/${env.BARK_KEY}/${encodeURIComponent('VPS Radar')}/${encodeURIComponent(text)}`)
       .catch(() => {}));
+  }
+  if (env.SCT_SENDKEY) {
+    jobs.push(fetch(`https://sctapi.ftqq.com/${env.SCT_SENDKEY}.send`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: `title=${encodeURIComponent('VPS Radar')}&desp=${encodeURIComponent(text)}`,
+    }).catch(() => {}));
+  }
+  if (env.PUSHPLUS_TOKEN) {
+    jobs.push(fetch('https://www.pushplus.plus/send', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ token: env.PUSHPLUS_TOKEN, title: 'VPS Radar', content: text }),
+    }).catch(() => {}));
   }
   await Promise.all(jobs);
 }

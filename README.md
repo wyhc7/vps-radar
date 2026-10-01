@@ -39,7 +39,11 @@
 |---|---|
 | `TG_BOT_TOKEN` | Telegram 机器人 Token：TG 里找 @BotFather → /newbot 拿到 |
 | `TG_CHAT_ID` | 接收通知的聊天 ID：先给你的机器人发条消息，再访问 `https://api.telegram.org/bot<TOKEN>/getUpdates` 看 `chat.id` |
-| `BARK_KEY` | iOS Bark 推送 Key（Bark App 首页那串），与 Telegram 二选一或都配 |
+| `BARK_KEY` | iOS Bark 推送 Key（Bark App 首页那串） |
+| `SCT_SENDKEY` | Server酱 Turbo 的 SendKey：<https://sct.ftqq.com> 微信扫码登录后复制 |
+| `PUSHPLUS_TOKEN` | Pushplus 的 token：<https://www.pushplus.plus> 微信扫码登录后复制 |
+
+四个通道可任意组合，配几个发几个。
 
 ### 第 4 步：点一下部署
 

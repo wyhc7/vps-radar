@@ -53,6 +53,20 @@ jobs:
           BARK_KEY: ${{ secrets.BARK_KEY }}
         run: echo -n "$BARK_KEY" | npx wrangler secret put BARK_KEY
 
+      # 可选：Server酱 Turbo（微信推送）
+      - name: Set ServerChan secret (optional)
+        if: ${{ env.SCT_SENDKEY != '' }}
+        env:
+          SCT_SENDKEY: ${{ secrets.SCT_SENDKEY }}
+        run: echo -n "$SCT_SENDKEY" | npx wrangler secret put SCT_SENDKEY
+
+      # 可选：Pushplus（微信推送）
+      - name: Set Pushplus secret (optional)
+        if: ${{ env.PUSHPLUS_TOKEN != '' }}
+        env:
+          PUSHPLUS_TOKEN: ${{ secrets.PUSHPLUS_TOKEN }}
+        run: echo -n "$PUSHPLUS_TOKEN" | npx wrangler secret put PUSHPLUS_TOKEN
+
       - name: Deploy worker
         run: npx wrangler deploy
 
