@@ -1,144 +1,224 @@
-// 内嵌前端：仪表盘 + 登录页。无外部依赖，图表用 canvas 手绘。
+// 内嵌前端：仪表盘 + 登录页。Brutalist 方向（见 STYLE.md），零外部依赖，canvas 手绘图表。
+// 字体走 Google Fonts CDN（Archivo Black + Space Mono），加载失败时降级系统 Arial/Courier New。
 
 const baseCss = `
-:root{--bg:#0d1117;--panel:#161b22;--line:#30363d;--fg:#e6edf3;--dim:#8b949e;
---ok:#3fb950;--warn:#d29922;--bad:#f85149;--acc:#58a6ff}
+:root{
+  --bg:#FFFFFF; --ink:#000000; --hot:#FF2D00; --link:#0000EE;
+  --ok:#0A7C00; --yellow:#FFE600; --paper:#F2F2F2;
+}
 *{box-sizing:border-box;margin:0;padding:0}
-body{background:var(--bg);color:var(--fg);font:14px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
-a{color:var(--acc);text-decoration:none}
-header{display:flex;align-items:center;gap:12px;padding:14px 20px;border-bottom:1px solid var(--line)}
-header h1{font-size:16px;font-weight:600}
-header .sp{flex:1}
-button{background:#21262d;color:var(--fg);border:1px solid var(--line);border-radius:6px;
-padding:5px 12px;cursor:pointer;font:inherit}
-button:hover{border-color:var(--dim)}
-button.primary{background:#1f6feb;border-color:#1f6feb;color:#fff}
-button.danger:hover{border-color:var(--bad);color:var(--bad)}
+html{-webkit-text-size-adjust:100%}
+body{
+  background:var(--bg); color:var(--ink);
+  font:14px/1.45 Arial,"Helvetica Neue",sans-serif;
+}
+.mono{font-family:"Space Mono","Courier New",monospace; font-variant-numeric:tabular-nums}
+.display{font-family:"Archivo Black",Arial,sans-serif; font-weight:400}
+button{
+  font:inherit; cursor:pointer; background:var(--bg); color:var(--ink);
+  border:3px solid var(--ink); padding:8px 16px; min-height:44px;
+  box-shadow:4px 4px 0 var(--ink);
+}
+button:active{transform:translate(4px,4px); box-shadow:0 0 0 var(--ink)}
+button:focus-visible{outline:3px solid var(--link); outline-offset:2px}
+a{color:var(--link)}
+a:focus-visible{outline:3px solid var(--link); outline-offset:2px}
+button.hot{background:var(--hot); color:#fff; border-color:var(--ink)}
+button.primary{background:var(--ink); color:#fff}
+@media (prefers-reduced-motion: no-preference){
+  button{transition:none} /* 粗野：无过渡，状态切换是突兀的 */
+}
 `;
 
 export function renderLogin() {
-  return `<!doctype html><html lang="zh"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1"><title>登录 · VPS Monitor</title>
+  return `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>LOGIN — VPS RADAR</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
 <style>${baseCss}
-main{display:grid;place-items:center;min-height:100vh}
-form{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:28px;width:320px}
-input{width:100%;background:#0d1117;border:1px solid var(--line);border-radius:6px;color:var(--fg);
-padding:8px 10px;margin:10px 0 16px;font:inherit}
-.err{color:var(--bad);min-height:20px;font-size:12px}
-</style></head><body><main><form id="f"><h2 style="font-size:15px;margin-bottom:4px">VPS Monitor</h2>
-<p style="color:var(--dim);font-size:12px">输入管理令牌进入仪表盘</p>
-<input type="password" id="t" placeholder="ADMIN_TOKEN" autocomplete="current-password">
-<button class="primary" style="width:100%">登录</button><div class="err" id="e"></div></form></main>
+main{display:grid;place-items:center;min-height:100vh;padding:20px;background:
+repeating-linear-gradient(45deg,var(--bg) 0 24px,var(--paper) 24px 48px)}
+form{background:var(--bg);border:4px solid var(--ink);box-shadow:10px 10px 0 var(--ink);
+padding:32px;width:min(400px,100%)}
+h1{font-size:32px;line-height:1;margin-bottom:6px}
+.sub{font-family:"Space Mono",monospace;font-size:12px;margin-bottom:20px;border-bottom:3px solid var(--ink);padding-bottom:12px}
+label{display:block;font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px}
+input{width:100%;border:3px solid var(--ink);background:var(--bg);color:var(--ink);
+padding:10px 12px;font:16px "Space Mono",monospace;margin-bottom:20px}
+input:focus-visible{outline:3px solid var(--link);outline-offset:2px}
+button{width:100%}
+.err{color:var(--hot);font-weight:700;min-height:22px;font-size:13px;margin-top:10px}
+</style></head><body><main>
+<form id="f">
+<h1 class="display">VPS<br>RADAR</h1>
+<p class="sub">RESTRICTED — ENTER ADMIN TOKEN</p>
+<label for="t">ADMIN TOKEN</label>
+<input type="password" id="t" autocomplete="current-password" required>
+<button type="submit" class="primary">UNLOCK</button>
+<div class="err" id="e" role="alert"></div>
+</form></main>
 <script>
 f.onsubmit=async ev=>{ev.preventDefault();
 const r=await fetch('/api/login',{method:'POST',headers:{'content-type':'application/json'},
 body:JSON.stringify({token:t.value})});
-if(r.ok)location.reload();else e.textContent='令牌错误';};
+if(r.ok)location.reload();else e.textContent='WRONG TOKEN';};
 </script></body></html>`;
 }
 
 export function renderDashboard(opts) {
   const admin = opts && opts.admin;
-  const title = (opts && opts.title) || 'VPS Monitor';
-  return `<!doctype html><html lang="zh"><head><meta charset="utf-8">
+  const title = (opts && opts.title) || 'VPS RADAR';
+  return `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
 <style>${baseCss}
-main{padding:20px;display:grid;gap:16px;grid-template-columns:repeat(auto-fill,minmax(340px,1fr))}
-.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px 16px;position:relative}
-.card.off{opacity:.55}
-.row{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:2px}
-.name{font-weight:600;font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.dot{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:6px}
-.on{background:var(--ok)}.offd{background:var(--bad)}
-.meta{color:var(--dim);font-size:12px;margin:2px 0 10px}
-.bar{height:6px;background:#21262d;border-radius:3px;overflow:hidden;margin:3px 0 9px}
-.bar i{display:block;height:100%;border-radius:3px;background:var(--ok)}
-.lbl{display:flex;justify-content:space-between;font-size:12px;color:var(--dim)}
-canvas.spark{width:100%;height:48px;display:block;margin-top:8px}
-.up{color:var(--dim);font-size:11px;position:absolute;top:14px;right:16px}
-.card .del{position:absolute;bottom:12px;right:16px;font-size:11px;padding:2px 8px}
-#dlg{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;place-items:center;z-index:9}
-#dlg .box{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:24px;width:min(720px,94vw)}
-#dlg canvas{width:100%;height:160px}
-#dlg .tabs{display:flex;gap:8px;margin:12px 0}
-#dlg .tabs button.on{border-color:var(--acc);color:var(--acc)}
-pre.cmd{background:#0d1117;border:1px solid var(--line);border-radius:6px;padding:10px;font-size:12px;
-overflow-x:auto;white-space:pre-wrap;word-break:break-all;color:var(--ok)}
-.empty{grid-column:1/-1;text-align:center;color:var(--dim);padding:60px 0}
+header{display:flex;align-items:center;gap:14px;flex-wrap:wrap;
+padding:14px 20px;border-bottom:4px solid var(--ink);background:var(--bg);
+position:sticky;top:0;z-index:5}
+h1{font-size:26px;line-height:1;letter-spacing:-.01em}
+#stat{font-family:"Space Mono",monospace;font-size:12px;
+border:2px solid var(--ink);padding:4px 8px}
+#tick{font-family:"Space Mono",monospace;font-size:12px;color:#555}
+header .sp{flex:1}
+main{padding:24px 20px;display:grid;gap:24px;
+grid-template-columns:repeat(auto-fill,minmax(min(320px,100%),1fr))}
+.card{background:var(--bg);border:3px solid var(--ink);box-shadow:6px 6px 0 var(--ink);
+padding:16px 16px 56px;position:relative;cursor:pointer}
+.card:focus-visible{outline:3px solid var(--link);outline-offset:2px}
+.card.down{background:var(--paper);border-color:var(--hot);box-shadow:6px 6px 0 var(--hot)}
+.status{display:inline-block;font-family:"Space Mono",monospace;font-weight:700;font-size:11px;
+letter-spacing:.12em;border:2px solid var(--ink);padding:2px 8px;margin-bottom:10px}
+.status.up{background:var(--ink);color:#fff}
+.status.dn{background:var(--hot);color:#fff;border-color:var(--hot)}
+.name{font-family:"Archivo Black",Arial,sans-serif;font-size:22px;line-height:1.05;
+word-break:break-all;margin-bottom:4px}
+.meta{font-family:"Space Mono",monospace;font-size:11px;color:#333;
+border-bottom:2px solid var(--ink);padding-bottom:8px;margin-bottom:10px}
+.info{font-family:"Space Mono",monospace;font-size:12px;font-weight:700;margin-bottom:10px}
+.info .exp-soon{background:var(--yellow);border:2px solid var(--ink);padding:1px 6px}
+.info .exp-crit{background:var(--hot);color:#fff;border:2px solid var(--ink);padding:1px 6px}
+.kv{display:flex;justify-content:space-between;gap:8px;
+font-family:"Space Mono",monospace;font-size:12px;margin-bottom:3px}
+.kv b{font-weight:700}
+.bar{height:14px;border:2px solid var(--ink);margin:2px 0 10px;background:var(--bg)}
+.bar i{display:block;height:100%;background:var(--ink)}
+.bar i.warn{background:var(--yellow)}
+.bar i.crit{background:var(--hot)}
+canvas.spark{width:100%;height:52px;display:block;border:2px solid var(--ink);margin-top:10px}
+.top{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
+.top .status{margin-bottom:0}
+.up{font-family:"Space Mono",monospace;font-size:10px}
+.actions{position:absolute;bottom:12px;right:16px;display:flex;gap:8px}
+.actions button{font-size:11px;min-height:36px;padding:4px 12px;box-shadow:3px 3px 0 var(--ink)}
+.actions button:active{transform:translate(3px,3px);box-shadow:0 0 0 var(--ink)}
+#dlg{position:fixed;inset:0;background:rgba(0,0,0,.5);display:none;place-items:center;z-index:9;padding:16px}
+#dlg .box{background:var(--bg);border:4px solid var(--ink);box-shadow:12px 12px 0 var(--ink);
+padding:24px;width:min(760px,100%);max-height:90vh;overflow:auto}
+#dlg .row{display:flex;justify-content:space-between;align-items:center;gap:12px}
+#dname{font-family:"Archivo Black",Arial,sans-serif;font-size:20px;word-break:break-all}
+#dtabs{display:flex;gap:8px;margin:14px 0;flex-wrap:wrap}
+#dtabs button{font-size:12px;min-height:40px;padding:6px 12px;box-shadow:3px 3px 0 var(--ink)}
+#dtabs button.on{background:var(--ink);color:#fff}
+#dchart{width:100%;height:170px;display:block;border:3px solid var(--ink)}
+pre.cmd{background:var(--ink);color:var(--bg);padding:12px;font:12px "Space Mono",monospace;
+overflow-x:auto;white-space:pre-wrap;word-break:break-all;border:3px solid var(--ink)}
+.empty{grid-column:1/-1;text-align:center;padding:80px 20px;
+font-family:"Archivo Black",Arial,sans-serif;font-size:24px}
+@media (max-width:480px){
+  h1{font-size:20px}
+  main{padding:16px 12px;gap:16px}
+  .name{font-size:18px}
+}
 </style></head><body>
-<header><h1>📡 ${title}</h1><span class="sp"></span>
-<span id="stat" style="color:var(--dim);font-size:12px"></span>
-${admin ? '<button id="add">+ 添加服务器</button>' : '<button id="login">🔑 登录管理</button>'}
+<header>
+<h1 class="display">${title}</h1>
+<span id="stat" class="mono" aria-live="polite">…</span>
+<span id="tick" class="mono"></span>
+<span class="sp"></span>
+${admin ? '<button id="add" class="primary">+ ADD SERVER</button>' : '<button id="login">LOGIN</button>'}
 </header>
-<main id="grid"><div class="empty">加载中…</div></main>
-<div id="dlg"><div class="box"><div class="row"><b id="dname"></b>
-<button onclick="dlg.style.display='none'">✕</button></div>
-<div class="tabs" id="dtabs"></div><div id="dbody"><canvas id="dchart"></canvas></div></div></div>
+<main id="grid"><div class="empty">LOADING…</div></main>
+<div id="dlg" role="dialog" aria-modal="true" aria-labelledby="dname">
+<div class="box"><div class="row"><b id="dname"></b>
+<button id="dclose" aria-label="关闭">✕ CLOSE</button></div>
+<div id="dtabs"></div><div id="dbody"><canvas id="dchart"></canvas></div></div></div>
 
 <script>
 const ADMIN=${admin ? 'true' : 'false'};
-let lastList=null;
+const REFRESH=30; // 秒
+let lastList=null, countdown=REFRESH;
 
 const fmtB=n=>{const u=['B','KB','MB','GB','TB'];let i=0;while(n>=1024&&i<u.length-1){n/=1024;i++}
 return n.toFixed(n>=100?0:1)+' '+u[i]};
 const fmtUp=s=>{if(!s)return'-';const d=~~(s/86400),h=~~(s%86400/3600),m=~~(s%3600/60);
-return d?d+'d '+h+'h':(h?h+'h '+m+'m':m+'m')};
+return d?d+'D '+h+'H':(h?h+'H '+m+'M':m+'M')};
 const pct=(a,b)=>b?Math.min(100,a/b*100):0;
-const color=p=>p<60?'var(--ok)':p<85?'var(--warn)':'var(--bad)';
+const cls=p=>p<60?'':p<85?'warn':'crit';
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 
 function spark(cv,data,lo,hi,stroke){
 const dpr=devicePixelRatio||1,w=cv.clientWidth,h=cv.clientHeight;
 cv.width=w*dpr;cv.height=h*dpr;const c=cv.getContext('2d');c.scale(dpr,dpr);
-if(!data||data.length<2){c.fillStyle='#8b949e';c.font='11px monospace';c.fillText('暂无数据',8,20);return}
+if(!data||data.length<2){c.fillStyle='#000';c.font='12px monospace';c.fillText('NO DATA',10,24);return}
 const min=lo??Math.min(...data),max=hi??Math.max(...data,1);
 c.beginPath();data.forEach((v,i)=>{const x=i/(data.length-1)*w,y=h-4-(v-min)/(max-min||1)*(h-8);
 i?c.lineTo(x,y):c.moveTo(x,y)});
-c.strokeStyle=stroke;c.lineWidth=1.5;c.stroke();
-c.lineTo(w,h);c.lineTo(0,h);c.closePath();c.fillStyle=stroke+'22';c.fill();
+c.strokeStyle=stroke;c.lineWidth=2;c.stroke();
 }
 
 function card(s){
 const mem=pct(s.mem_used,s.mem_total),dsk=pct(s.disk_used,s.disk_total);
-const t=new Date(s.ts*1000).toLocaleTimeString();
+const t=new Date(s.ts*1000).toLocaleTimeString('zh-CN',{hour12:false});
 let info='';
 if(s.price||s.expire_at){
-  info='<div class="meta">';
-  if(s.price)info+='💰 '+esc(s.price);
+  info='<div class="info">';
+  if(s.price)info+='PRICE '+esc(s.price)+' ';
   if(s.expire_at){
     const days=Math.ceil((s.expire_at*1000-Date.now())/86400000);
-    const c=days<=3?'var(--bad)':days<=7?'var(--warn)':'var(--dim)';
-    info+=(s.price?' · ':'')+'<span style="color:'+c+'">📅 '+new Date(s.expire_at*1000).toISOString().slice(0,10)
-      +' 到期'+(days>=0?'（剩 '+days+' 天）':'（已过期）')+'</span>';
+    const c=days<=3?'exp-crit':days<=7?'exp-soon':'';
+    const dstr=new Date(s.expire_at*1000).toISOString().slice(0,10);
+    info+='<span class="'+c+'">EXP '+dstr+(days>=0?' D-'+days:' EXPIRED')+'</span>';
   }
   info+='</div>';
 }
-return '<div class="card'+(s.online?'':' off')+'" data-id="'+s.id+'">'
-+'<div class="row"><span class="name"><i class="dot '+(s.online?'on':'offd')+'"></i>'
-+esc(s.name||s.id.slice(0,8))+'</span></div>'
-+'<div class="meta">'+esc(s.os||'-')+' · '+esc(s.ip||'-')+' · up '+fmtUp(s.uptime)+'</div>'
+return '<article class="card'+(s.online?'':' down')+'" data-id="'+s.id+'" tabindex="0" role="button"'
++' aria-label="'+esc(s.name||s.id)+' '+(s.online?'在线':'离线')+'">'
++'<div class="top"><span class="status '+(s.online?'up':'dn')+'">'+(s.online?'ONLINE':'OFFLINE')
++'</span><span class="up mono">'+t+'</span></div>'
++'<div class="name">'+esc(s.name||s.id.slice(0,8))+'</div>'
++'<div class="meta">'+esc(s.os||'-')+' / '+esc(s.ip||'-')+' / UP '+fmtUp(s.uptime)+'</div>'
 +info
-+'<div class="lbl"><span>CPU '+s.cpu.toFixed(1)+'%</span><span>load '+s.load1.toFixed(2)+'</span></div>'
-+'<div class="bar"><i style="width:'+s.cpu+'%;background:'+color(s.cpu)+'"></i></div>'
-+'<div class="lbl"><span>内存 '+fmtB(s.mem_used)+' / '+fmtB(s.mem_total)+'</span><span>'+mem.toFixed(0)+'%</span></div>'
-+'<div class="bar"><i style="width:'+mem+'%;background:'+color(mem)+'"></i></div>'
-+'<div class="lbl"><span>磁盘 '+fmtB(s.disk_used)+' / '+fmtB(s.disk_total)+'</span><span>'+dsk.toFixed(0)+'%</span></div>'
-+'<div class="bar"><i style="width:'+dsk+'%;background:'+color(dsk)+'"></i></div>'
-+'<div class="lbl"><span>↓ '+fmtB(s.net_rx)+'/s</span><span>↑ '+fmtB(s.net_tx)+'/s</span></div>'
-+'<div class="lbl"><span>累计 ↓ '+fmtB(s.net_rx_total)+' ↑ '+fmtB(s.net_tx_total)+'</span></div>'
-+'<canvas class="spark"></canvas>'
-+'<div class="up">'+t+'</div>'
-+(ADMIN?'<button class="edit" style="position:absolute;bottom:12px;right:64px;font-size:11px;padding:2px 8px">编辑</button><button class="del danger">删除</button>':'')
-+'</div>';
++'<div class="kv"><span>CPU</span><b>'+s.cpu.toFixed(1)+'% · LOAD '+s.load1.toFixed(2)+'</b></div>'
++'<div class="bar" role="img" aria-label="CPU '+s.cpu.toFixed(0)+'%"><i class="'+cls(s.cpu)+'" style="width:'+s.cpu+'%"></i></div>'
++'<div class="kv"><span>MEM</span><b>'+fmtB(s.mem_used)+' / '+fmtB(s.mem_total)+'</b></div>'
++'<div class="bar" role="img" aria-label="内存 '+mem.toFixed(0)+'%"><i class="'+cls(mem)+'" style="width:'+mem+'%"></i></div>'
++'<div class="kv"><span>DISK</span><b>'+fmtB(s.disk_used)+' / '+fmtB(s.disk_total)+'</b></div>'
++'<div class="bar" role="img" aria-label="磁盘 '+dsk.toFixed(0)+'%"><i class="'+cls(dsk)+'" style="width:'+dsk+'%"></i></div>'
++'<div class="kv"><span>NET</span><b>IN '+fmtB(s.net_rx)+'/s · OUT '+fmtB(s.net_tx)+'/s</b></div>'
++'<div class="kv"><span>TOTAL</span><b>IN '+fmtB(s.net_rx_total)+' · OUT '+fmtB(s.net_tx_total)+'</b></div>'
++(ADMIN?'<div class="actions"><button class="edit">EDIT</button><button class="del hot">DEL</button></div>':'')
++'</article>';
 }
-const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 
 async function load(){
-const r=await fetch('/api/servers');if(r.status===401){location.reload();return}
-const d=await r.json();lastList=d;
-stat.textContent=d.servers.length+' 台 · '+d.servers.filter(s=>s.online).length+' 在线';
-grid.innerHTML=d.servers.length?d.servers.map(card).join(''):'<div class="empty">还没有服务器，点击右上角添加</div>';
-// 点击卡片看历史 / 删除
+let d;
+try{
+const r=await fetch('/api/servers');
+if(r.status===401){location.reload();return}
+d=await r.json();
+}catch(e){
+tick.textContent='FETCH FAILED — RETRY IN '+REFRESH+'S';return;
+}
+lastList=d;
+stat.textContent=d.servers.length+' NODES / '+d.servers.filter(s=>s.online).length+' UP';
+grid.innerHTML=d.servers.length?d.servers.map(card).join('')
+:'<div class="empty">NO NODES YET — ADD ONE</div>';
 grid.querySelectorAll('.card').forEach(c=>{
+const open=()=>{const s=(lastList.servers||[]).find(x=>x.id===c.dataset.id);if(s)openDetail(s)};
+c.addEventListener('keydown',ev=>{if(ev.key==='Enter'&&ev.target===c)open()});
 c.addEventListener('click',async ev=>{
 const s=(lastList.servers||[]).find(x=>x.id===c.dataset.id);
 if(ev.target.classList.contains('del')){
@@ -153,48 +233,56 @@ const cur=s.expire_at?new Date(s.expire_at*1000).toISOString().slice(0,10):'';
 const exp=prompt('到期日期（YYYY-MM-DD，留空清除）:',cur);if(exp===null)return;
 let expire_at=0;
 if(exp.trim()){
-const d=new Date(exp.trim()+'T23:59:59Z');
-if(isNaN(d)){alert('日期格式不对');return}
-expire_at=Math.floor(d.getTime()/1000);
+const dd=new Date(exp.trim()+'T23:59:59Z');
+if(isNaN(dd)){alert('日期格式不对');return}
+expire_at=Math.floor(dd.getTime()/1000);
 }
 await fetch('/api/servers/'+c.dataset.id,{method:'PATCH',
 headers:{'content-type':'application/json'},
 body:JSON.stringify({name,price,expire_at})});
 load();return;
 }
-if(s)openDetail(s);
+open();
 });
 });
+countdown=REFRESH;
 }
+
 async function openDetail(s){
 dname.textContent=s.name||s.id;
 dbody.innerHTML='<canvas id="dchart"></canvas>';
 const chart=dbody.firstChild;
 dlg.style.display='grid';
-const kinds=[['CPU %','cpu',0,100,'#58a6ff'],['内存','mem_used',null,null,'#3fb950'],
-['↓ 流量','net_rx',null,null,'#d29922'],['↑ 流量','net_tx',null,null,'#f85149']];
+dclose.focus();
+const kinds=[['CPU %','cpu',0,100,'#0000EE'],['MEM USED','mem_used',null,null,'#000000'],
+['NET IN','net_rx',null,null,'#0A7C00'],['NET OUT','net_tx',null,null,'#FF2D00']];
 dtabs.innerHTML='';
-kinds.forEach((k,i)=>{
-const b=document.createElement('button');b.textContent=k[0];if(i===0)b.className='on';
-b.onclick=async()=>{dtabs.querySelectorAll('button').forEach(x=>x.className='');b.className='on';draw(k)};
-dtabs.appendChild(b);
-});
 const r=await fetch('/api/history/'+s.id+'?hours=24');const d=await r.json();
 const draw=k=>spark(chart,d.points.map(p=>p[k[1]]),k[2],k[3],k[4]);
+kinds.forEach((k,i)=>{
+const b=document.createElement('button');b.textContent=k[0];if(i===0)b.className='on';
+b.onclick=()=>{dtabs.querySelectorAll('button').forEach(x=>x.className='');b.className='on';draw(k)};
+dtabs.appendChild(b);
+});
 draw(kinds[0]);
 }
+dclose.onclick=()=>{dlg.style.display='none'};
+dlg.addEventListener('click',ev=>{if(ev.target===dlg)dlg.style.display='none'});
+document.addEventListener('keydown',ev=>{if(ev.key==='Escape')dlg.style.display='none'});
 
-${admin ? `add.onclick=async()=>{const name=prompt('服务器备注名（可留空）:','');
+${admin ? `add.onclick=async()=>{
+const name=prompt('服务器备注名（可留空）:','');
 if(name===null)return;
 const r=await fetch('/api/servers',{method:'POST',headers:{'content-type':'application/json'},
 body:JSON.stringify({name})});
 const d=await r.json();
 const box=document.createElement('div');
-box.innerHTML='<p style="margin-bottom:8px">在该 VPS 上执行一键安装：</p>'
+box.innerHTML='<p style="margin-bottom:10px">在该 VPS 上执行一键安装：</p>'
 +'<pre class="cmd">bash <(curl -fsSL '+location.origin+'/agent.sh) '+location.origin+' '+d.id+' '+d.token+'</pre>';
-dlg.style.display='grid';dname.textContent='添加成功';
+dlg.style.display='grid';dname.textContent='ADDED';
 dtabs.innerHTML='';dbody.innerHTML='';dbody.appendChild(box);
-};`:`login.onclick=async()=>{
+dclose.focus();
+};` : `login.onclick=async()=>{
 const t=prompt('输入 ADMIN_TOKEN:');
 if(t===null)return;
 const r=await fetch('/api/login',{method:'POST',headers:{'content-type':'application/json'},
@@ -202,6 +290,11 @@ body:JSON.stringify({token:t})});
 if(r.ok)location.reload();else alert('令牌错误');
 };`}
 
-load();setInterval(load,10000);
+load();
+setInterval(load,REFRESH*1000);
+setInterval(()=>{
+if(countdown>0)countdown--;
+tick.textContent=countdown>0?('NEXT REFRESH '+countdown+'S'):'REFRESHING…';
+},1000);
 </script></body></html>`;
 }

@@ -279,7 +279,7 @@ export default {
       }
       return new Response(renderDashboard({
         admin: isAdmin(req, env, url),
-        title: env.SITE_TITLE || 'VPS Radar',
+        title: env.SITE_TITLE || 'VPS RADAR',
       }), { headers: { 'content-type': 'text/html; charset=utf-8' } });
     }
 
