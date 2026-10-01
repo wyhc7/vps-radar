@@ -1,0 +1,21 @@
+name = "vps-radar"
+main = "src/index.js"
+compatibility_date = "2025-01-01"
+
+# 将 agent.sh 以文本形式打包进 Worker，/agent.sh 路由直接下发
+rules = [{ type = "Text", globs = ["**/*.sh"] }]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "vps-radar"
+database_id = "<创建 D1 后填入: npx wrangler d1 create vps-radar>"
+
+[vars]
+# 仪表盘是否公开（"1" = 无需登录即可看 / 页面；"0" 或未设置 = 需 ADMIN_TOKEN）
+PUBLIC_DASHBOARD = "1"
+# 历史数据保留天数
+RETENTION_DAYS = "30"
+# 超过多少秒未上报判定离线
+OFFLINE_AFTER = "120"
+# ADMIN_TOKEN 请用 secret 注入而不是写在这里：
+#   npx wrangler secret put ADMIN_TOKEN
