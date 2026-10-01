@@ -68,7 +68,7 @@ overflow-x:auto;white-space:pre-wrap;word-break:break-all;color:var(--ok)}
 </style></head><body>
 <header><h1>📡 ${title}</h1><span class="sp"></span>
 <span id="stat" style="color:var(--dim);font-size:12px"></span>
-${admin ? '<button id="add">+ 添加服务器</button>' : ''}
+${admin ? '<button id="add">+ 添加服务器</button>' : '<button id="login">🔑 登录管理</button>'}
 </header>
 <main id="grid"><div class="empty">加载中…</div></main>
 <div id="dlg"><div class="box"><div class="row"><b id="dname"></b>
@@ -154,8 +154,7 @@ const draw=k=>spark(chart,d.points.map(p=>p[k[1]]),k[2],k[3],k[4]);
 draw(kinds[0]);
 }
 
-${admin ? `add.onclick=async()=>{
-const name=prompt('服务器备注名（可留空）:','');
+${admin ? `add.onclick=async()=>{const name=prompt('服务器备注名（可留空）:','');
 if(name===null)return;
 const r=await fetch('/api/servers',{method:'POST',headers:{'content-type':'application/json'},
 body:JSON.stringify({name})});
@@ -165,7 +164,13 @@ box.innerHTML='<p style="margin-bottom:8px">在该 VPS 上执行一键安装：<
 +'<pre class="cmd">bash <(curl -fsSL '+location.origin+'/agent.sh) '+location.origin+' '+d.id+' '+d.token+'</pre>';
 dlg.style.display='grid';dname.textContent='添加成功';
 dtabs.innerHTML='';dbody.innerHTML='';dbody.appendChild(box);
-};`:''}
+};`:`login.onclick=async()=>{
+const t=prompt('输入 ADMIN_TOKEN:');
+if(t===null)return;
+const r=await fetch('/api/login',{method:'POST',headers:{'content-type':'application/json'},
+body:JSON.stringify({token:t})});
+if(r.ok)location.reload();else alert('令牌错误');
+};`}
 
 load();setInterval(load,10000);
 </script></body></html>`;
