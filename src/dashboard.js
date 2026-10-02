@@ -1,5 +1,5 @@
 // 内嵌前端：仪表盘 + 登录页。Brutalist 方向（见 STYLE.md），零外部依赖，canvas 手绘图表。
-// 字体走 Google Fonts CDN（Archivo Black + Space Mono），加载失败时降级系统 Arial/Courier New。
+// 字体走 Google Fonts CDN（Archivo Black + Space Mono），加载失败时降级系统字体。
 
 const baseCss = `
 :root{
@@ -10,10 +10,10 @@ const baseCss = `
 html{-webkit-text-size-adjust:100%}
 body{
   background:var(--bg); color:var(--ink);
-  font:14px/1.45 Arial,"Helvetica Neue",sans-serif;
+  font:14px/1.45 Arial,"Helvetica Neue","PingFang SC","Microsoft YaHei",sans-serif;
 }
 .mono{font-family:"Space Mono","Courier New",monospace; font-variant-numeric:tabular-nums}
-.display{font-family:"Archivo Black",Arial,sans-serif; font-weight:400}
+.display{font-family:"Archivo Black","PingFang SC","Microsoft YaHei",Arial,sans-serif; font-weight:400}
 button{
   font:inherit; cursor:pointer; background:var(--bg); color:var(--ink);
   border:3px solid var(--ink); padding:8px 16px; min-height:44px;
@@ -25,14 +25,28 @@ a{color:var(--link)}
 a:focus-visible{outline:3px solid var(--link); outline-offset:2px}
 button.hot{background:var(--hot); color:#fff; border-color:var(--ink)}
 button.primary{background:var(--ink); color:#fff}
-@media (prefers-reduced-motion: no-preference){
-  button{transition:none} /* 粗野：无过渡，状态切换是突兀的 */
+label{display:block;font-weight:700;font-size:12px;margin-bottom:6px}
+input,select{
+  width:100%;border:3px solid var(--ink);background:var(--bg);color:var(--ink);
+  padding:10px 12px;font:15px "Space Mono","Courier New",monospace;margin-bottom:16px;
 }
+input:focus-visible,select:focus-visible{outline:3px solid var(--link);outline-offset:2px}
+`;
+
+const dlgCss = `
+.dlg{position:fixed;inset:0;background:rgba(0,0,0,.5);display:none;place-items:center;z-index:9;padding:16px}
+.dlg .box{background:var(--bg);border:4px solid var(--ink);box-shadow:12px 12px 0 var(--ink);
+padding:24px;width:min(760px,100%);max-height:90vh;overflow:auto}
+.dlg .row{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:14px}
+.dlg-title{font-family:"Archivo Black","PingFang SC","Microsoft YaHei",Arial,sans-serif;
+font-size:20px;word-break:break-all}
+pre.cmd{background:var(--ink);color:var(--bg);padding:12px;font:12px "Space Mono",monospace;
+overflow-x:auto;white-space:pre-wrap;word-break:break-all;border:3px solid var(--ink)}
 `;
 
 export function renderLogin() {
   return `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1"><title>LOGIN — VPS RADAR</title>
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>登录 — VPS RADAR</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
@@ -43,26 +57,22 @@ form{background:var(--bg);border:4px solid var(--ink);box-shadow:10px 10px 0 var
 padding:32px;width:min(400px,100%)}
 h1{font-size:32px;line-height:1;margin-bottom:6px}
 .sub{font-family:"Space Mono",monospace;font-size:12px;margin-bottom:20px;border-bottom:3px solid var(--ink);padding-bottom:12px}
-label{display:block;font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px}
-input{width:100%;border:3px solid var(--ink);background:var(--bg);color:var(--ink);
-padding:10px 12px;font:16px "Space Mono",monospace;margin-bottom:20px}
-input:focus-visible{outline:3px solid var(--link);outline-offset:2px}
 button{width:100%}
 .err{color:var(--hot);font-weight:700;min-height:22px;font-size:13px;margin-top:10px}
 </style></head><body><main>
 <form id="f">
 <h1 class="display">VPS<br>RADAR</h1>
-<p class="sub">RESTRICTED — ENTER ADMIN TOKEN</p>
-<label for="t">ADMIN TOKEN</label>
+<p class="sub">内部系统 · 请输入管理令牌</p>
+<label for="t">管理令牌</label>
 <input type="password" id="t" autocomplete="current-password" required>
-<button type="submit" class="primary">UNLOCK</button>
+<button type="submit" class="primary">进入面板</button>
 <div class="err" id="e" role="alert"></div>
 </form></main>
 <script>
 f.onsubmit=async ev=>{ev.preventDefault();
 const r=await fetch('/api/login',{method:'POST',headers:{'content-type':'application/json'},
 body:JSON.stringify({token:t.value})});
-if(r.ok)location.reload();else e.textContent='WRONG TOKEN';};
+if(r.ok)location.reload();else e.textContent='令牌错误';};
 </script></body></html>`;
 }
 
@@ -90,11 +100,13 @@ padding:16px 16px 56px;position:relative;cursor:pointer}
 .card:focus-visible{outline:3px solid var(--link);outline-offset:2px}
 .card.down{background:var(--paper);border-color:var(--hot);box-shadow:6px 6px 0 var(--hot)}
 .status{display:inline-block;font-family:"Space Mono",monospace;font-weight:700;font-size:11px;
-letter-spacing:.12em;border:2px solid var(--ink);padding:2px 8px;margin-bottom:10px}
+border:2px solid var(--ink);padding:2px 8px}
 .status.up{background:var(--ink);color:#fff}
 .status.dn{background:var(--hot);color:#fff;border-color:var(--hot)}
-.name{font-family:"Archivo Black",Arial,sans-serif;font-size:22px;line-height:1.05;
-word-break:break-all;margin-bottom:4px}
+.top{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
+.up{font-family:"Space Mono",monospace;font-size:10px}
+.name{font-family:"Archivo Black","PingFang SC","Microsoft YaHei",Arial,sans-serif;
+font-size:22px;line-height:1.1;word-break:break-all;margin-bottom:4px}
 .meta{font-family:"Space Mono",monospace;font-size:11px;color:#333;
 border-bottom:2px solid var(--ink);padding-bottom:8px;margin-bottom:10px}
 .info{font-family:"Space Mono",monospace;font-size:12px;font-weight:700;margin-bottom:10px}
@@ -107,44 +119,59 @@ font-family:"Space Mono",monospace;font-size:12px;margin-bottom:3px}
 .bar i{display:block;height:100%;background:var(--ink)}
 .bar i.warn{background:var(--yellow)}
 .bar i.crit{background:var(--hot)}
-canvas.spark{width:100%;height:52px;display:block;border:2px solid var(--ink);margin-top:10px}
-.top{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
-.top .status{margin-bottom:0}
-.up{font-family:"Space Mono",monospace;font-size:10px}
 .actions{position:absolute;bottom:12px;right:16px;display:flex;gap:8px}
-.actions button{font-size:11px;min-height:36px;padding:4px 12px;box-shadow:3px 3px 0 var(--ink)}
+.actions button{font-size:12px;min-height:36px;padding:4px 12px;box-shadow:3px 3px 0 var(--ink)}
 .actions button:active{transform:translate(3px,3px);box-shadow:0 0 0 var(--ink)}
-#dlg{position:fixed;inset:0;background:rgba(0,0,0,.5);display:none;place-items:center;z-index:9;padding:16px}
-#dlg .box{background:var(--bg);border:4px solid var(--ink);box-shadow:12px 12px 0 var(--ink);
-padding:24px;width:min(760px,100%);max-height:90vh;overflow:auto}
-#dlg .row{display:flex;justify-content:space-between;align-items:center;gap:12px}
-#dname{font-family:"Archivo Black",Arial,sans-serif;font-size:20px;word-break:break-all}
 #dtabs{display:flex;gap:8px;margin:14px 0;flex-wrap:wrap}
 #dtabs button{font-size:12px;min-height:40px;padding:6px 12px;box-shadow:3px 3px 0 var(--ink)}
 #dtabs button.on{background:var(--ink);color:#fff}
 #dchart{width:100%;height:170px;display:block;border:3px solid var(--ink)}
-pre.cmd{background:var(--ink);color:var(--bg);padding:12px;font:12px "Space Mono",monospace;
-overflow-x:auto;white-space:pre-wrap;word-break:break-all;border:3px solid var(--ink)}
 .empty{grid-column:1/-1;text-align:center;padding:80px 20px;
-font-family:"Archivo Black",Arial,sans-serif;font-size:24px}
+font-family:"Archivo Black","PingFang SC","Microsoft YaHei",sans-serif;font-size:24px}
+.form-btns{display:flex;gap:12px}
+.form-btns button{flex:1}
+.hint{font-size:12px;color:#555;margin:-10px 0 16px}
 @media (max-width:480px){
   h1{font-size:20px}
   main{padding:16px 12px;gap:16px}
   .name{font-size:18px}
 }
+${dlgCss}
 </style></head><body>
 <header>
 <h1 class="display">${title}</h1>
 <span id="stat" class="mono" aria-live="polite">…</span>
 <span id="tick" class="mono"></span>
 <span class="sp"></span>
-${admin ? '<button id="add" class="primary">+ ADD SERVER</button>' : '<button id="login">LOGIN</button>'}
+${admin ? '<button id="add" class="primary">+ 添加服务器</button>' : '<button id="login">登录管理</button>'}
 </header>
-<main id="grid"><div class="empty">LOADING…</div></main>
-<div id="dlg" role="dialog" aria-modal="true" aria-labelledby="dname">
-<div class="box"><div class="row"><b id="dname"></b>
-<button id="dclose" aria-label="关闭">✕ CLOSE</button></div>
+<main id="grid"><div class="empty">加载中…</div></main>
+
+<div id="dlg" class="dlg" role="dialog" aria-modal="true" aria-labelledby="dname">
+<div class="box"><div class="row"><b id="dname" class="dlg-title"></b>
+<button id="dclose">✕ 关闭</button></div>
 <div id="dtabs"></div><div id="dbody"><canvas id="dchart"></canvas></div></div></div>
+
+<div id="fdlg" class="dlg" role="dialog" aria-modal="true" aria-labelledby="ftitle">
+<div class="box"><div class="row"><b id="ftitle" class="dlg-title"></b>
+<button id="fclose">✕ 关闭</button></div>
+<form id="sform">
+<label for="f-name">备注名</label>
+<input id="f-name" maxlength="64" placeholder="例如：东京主力机">
+<label for="f-price">价格</label>
+<input id="f-price" maxlength="32" placeholder="例如：¥299/年">
+<div class="hint">自由文本，留空则不显示</div>
+<label for="f-exp">到期日期</label>
+<input id="f-exp" type="date">
+<div class="hint">到期前 7 天和 3 天会各推送一次提醒；留空则关闭提醒</div>
+<div class="form-btns"><button type="submit" class="primary" id="f-save">保存</button></div>
+</form>
+<div id="f-done" style="display:none">
+<p style="margin-bottom:10px;font-weight:700">创建成功。在该 VPS 上执行一键安装：</p>
+<pre class="cmd" id="f-cmd"></pre>
+<div class="form-btns" style="margin-top:16px"><button class="primary" id="f-ok">完成</button></div>
+</div>
+</div></div>
 
 <script>
 const ADMIN=${admin ? 'true' : 'false'};
@@ -154,7 +181,7 @@ let lastList=null, countdown=REFRESH;
 const fmtB=n=>{const u=['B','KB','MB','GB','TB'];let i=0;while(n>=1024&&i<u.length-1){n/=1024;i++}
 return n.toFixed(n>=100?0:1)+' '+u[i]};
 const fmtUp=s=>{if(!s)return'-';const d=~~(s/86400),h=~~(s%86400/3600),m=~~(s%3600/60);
-return d?d+'D '+h+'H':(h?h+'H '+m+'M':m+'M')};
+return d?d+'天':(h?h+'小时':m+'分钟')};
 const pct=(a,b)=>b?Math.min(100,a/b*100):0;
 const cls=p=>p<60?'':p<85?'warn':'crit';
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -162,7 +189,7 @@ const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',
 function spark(cv,data,lo,hi,stroke){
 const dpr=devicePixelRatio||1,w=cv.clientWidth,h=cv.clientHeight;
 cv.width=w*dpr;cv.height=h*dpr;const c=cv.getContext('2d');c.scale(dpr,dpr);
-if(!data||data.length<2){c.fillStyle='#000';c.font='12px monospace';c.fillText('NO DATA',10,24);return}
+if(!data||data.length<2){c.fillStyle='#000';c.font='12px monospace';c.fillText('暂无数据',10,24);return}
 const min=lo??Math.min(...data),max=hi??Math.max(...data,1);
 c.beginPath();data.forEach((v,i)=>{const x=i/(data.length-1)*w,y=h-4-(v-min)/(max-min||1)*(h-8);
 i?c.lineTo(x,y):c.moveTo(x,y)});
@@ -175,31 +202,31 @@ const t=new Date(s.ts*1000).toLocaleTimeString('zh-CN',{hour12:false});
 let info='';
 if(s.price||s.expire_at){
   info='<div class="info">';
-  if(s.price)info+='PRICE '+esc(s.price)+' ';
+  if(s.price)info+='价格 '+esc(s.price)+' ';
   if(s.expire_at){
     const days=Math.ceil((s.expire_at*1000-Date.now())/86400000);
     const c=days<=3?'exp-crit':days<=7?'exp-soon':'';
     const dstr=new Date(s.expire_at*1000).toISOString().slice(0,10);
-    info+='<span class="'+c+'">EXP '+dstr+(days>=0?' D-'+days:' EXPIRED')+'</span>';
+    info+='<span class="'+c+'">到期 '+dstr+(days>=0?' 剩'+days+'天':' 已过期')+'</span>';
   }
   info+='</div>';
 }
 return '<article class="card'+(s.online?'':' down')+'" data-id="'+s.id+'" tabindex="0" role="button"'
 +' aria-label="'+esc(s.name||s.id)+' '+(s.online?'在线':'离线')+'">'
-+'<div class="top"><span class="status '+(s.online?'up':'dn')+'">'+(s.online?'ONLINE':'OFFLINE')
++'<div class="top"><span class="status '+(s.online?'up':'dn')+'">'+(s.online?'● 在线':'● 离线')
 +'</span><span class="up mono">'+t+'</span></div>'
 +'<div class="name">'+esc(s.name||s.id.slice(0,8))+'</div>'
-+'<div class="meta">'+esc(s.os||'-')+' / '+esc(s.ip||'-')+' / UP '+fmtUp(s.uptime)+'</div>'
++'<div class="meta">'+esc(s.os||'-')+' / '+esc(s.ip||'-')+' / 运行 '+fmtUp(s.uptime)+'</div>'
 +info
-+'<div class="kv"><span>CPU</span><b>'+s.cpu.toFixed(1)+'% · LOAD '+s.load1.toFixed(2)+'</b></div>'
-+'<div class="bar" role="img" aria-label="CPU '+s.cpu.toFixed(0)+'%"><i class="'+cls(s.cpu)+'" style="width:'+s.cpu+'%"></i></div>'
-+'<div class="kv"><span>MEM</span><b>'+fmtB(s.mem_used)+' / '+fmtB(s.mem_total)+'</b></div>'
++'<div class="kv"><span>处理器</span><b>'+s.cpu.toFixed(1)+'% · 负载 '+s.load1.toFixed(2)+'</b></div>'
++'<div class="bar" role="img" aria-label="处理器 '+s.cpu.toFixed(0)+'%"><i class="'+cls(s.cpu)+'" style="width:'+s.cpu+'%"></i></div>'
++'<div class="kv"><span>内存</span><b>'+fmtB(s.mem_used)+' / '+fmtB(s.mem_total)+'</b></div>'
 +'<div class="bar" role="img" aria-label="内存 '+mem.toFixed(0)+'%"><i class="'+cls(mem)+'" style="width:'+mem+'%"></i></div>'
-+'<div class="kv"><span>DISK</span><b>'+fmtB(s.disk_used)+' / '+fmtB(s.disk_total)+'</b></div>'
++'<div class="kv"><span>磁盘</span><b>'+fmtB(s.disk_used)+' / '+fmtB(s.disk_total)+'</b></div>'
 +'<div class="bar" role="img" aria-label="磁盘 '+dsk.toFixed(0)+'%"><i class="'+cls(dsk)+'" style="width:'+dsk+'%"></i></div>'
-+'<div class="kv"><span>NET</span><b>IN '+fmtB(s.net_rx)+'/s · OUT '+fmtB(s.net_tx)+'/s</b></div>'
-+'<div class="kv"><span>TOTAL</span><b>IN '+fmtB(s.net_rx_total)+' · OUT '+fmtB(s.net_tx_total)+'</b></div>'
-+(ADMIN?'<div class="actions"><button class="edit">EDIT</button><button class="del hot">DEL</button></div>':'')
++'<div class="kv"><span>网速</span><b>↓ '+fmtB(s.net_rx)+'/s · ↑ '+fmtB(s.net_tx)+'/s</b></div>'
++'<div class="kv"><span>累计流量</span><b>↓ '+fmtB(s.net_rx_total)+' · ↑ '+fmtB(s.net_tx_total)+'</b></div>'
++(ADMIN?'<div class="actions"><button class="edit">编辑</button><button class="del hot">删除</button></div>':'')
 +'</article>';
 }
 
@@ -210,37 +237,24 @@ const r=await fetch('/api/servers');
 if(r.status===401){location.reload();return}
 d=await r.json();
 }catch(e){
-tick.textContent='FETCH FAILED — RETRY IN '+REFRESH+'S';return;
+tick.textContent='获取失败，'+REFRESH+' 秒后重试';return;
 }
 lastList=d;
-stat.textContent=d.servers.length+' NODES / '+d.servers.filter(s=>s.online).length+' UP';
+stat.textContent='共 '+d.servers.length+' 台 / '+d.servers.filter(s=>s.online).length+' 台在线';
 grid.innerHTML=d.servers.length?d.servers.map(card).join('')
-:'<div class="empty">NO NODES YET — ADD ONE</div>';
+:'<div class="empty">还没有服务器 — 点右上角添加</div>';
 grid.querySelectorAll('.card').forEach(c=>{
-const open=()=>{const s=(lastList.servers||[]).find(x=>x.id===c.dataset.id);if(s)openDetail(s)};
+const find=()=>(lastList.servers||[]).find(x=>x.id===c.dataset.id);
+const open=()=>{const s=find();if(s)openDetail(s)};
 c.addEventListener('keydown',ev=>{if(ev.key==='Enter'&&ev.target===c)open()});
 c.addEventListener('click',async ev=>{
-const s=(lastList.servers||[]).find(x=>x.id===c.dataset.id);
+const s=find();
 if(ev.target.classList.contains('del')){
-if(!confirm('删除该服务器及其全部历史？'))return;
+if(!confirm('删除该服务器及其全部历史数据？'))return;
 await fetch('/api/servers/'+c.dataset.id,{method:'DELETE'});load();return;
 }
 if(ev.target.classList.contains('edit')){
-if(!s)return;
-const name=prompt('备注名:',s.name||'');if(name===null)return;
-const price=prompt('价格（自由文本，如 ¥299/年，留空不显示）:',s.price||'');if(price===null)return;
-const cur=s.expire_at?new Date(s.expire_at*1000).toISOString().slice(0,10):'';
-const exp=prompt('到期日期（YYYY-MM-DD，留空清除）:',cur);if(exp===null)return;
-let expire_at=0;
-if(exp.trim()){
-const dd=new Date(exp.trim()+'T23:59:59Z');
-if(isNaN(dd)){alert('日期格式不对');return}
-expire_at=Math.floor(dd.getTime()/1000);
-}
-await fetch('/api/servers/'+c.dataset.id,{method:'PATCH',
-headers:{'content-type':'application/json'},
-body:JSON.stringify({name,price,expire_at})});
-load();return;
+if(s)openForm(s);return;
 }
 open();
 });
@@ -254,8 +268,8 @@ dbody.innerHTML='<canvas id="dchart"></canvas>';
 const chart=dbody.firstChild;
 dlg.style.display='grid';
 dclose.focus();
-const kinds=[['CPU %','cpu',0,100,'#0000EE'],['MEM USED','mem_used',null,null,'#000000'],
-['NET IN','net_rx',null,null,'#0A7C00'],['NET OUT','net_tx',null,null,'#FF2D00']];
+const kinds=[['处理器 %','cpu',0,100,'#0000EE'],['内存占用','mem_used',null,null,'#000000'],
+['下载速度','net_rx',null,null,'#0A7C00'],['上传速度','net_tx',null,null,'#FF2D00']];
 dtabs.innerHTML='';
 const r=await fetch('/api/history/'+s.id+'?hours=24');const d=await r.json();
 const draw=k=>spark(chart,d.points.map(p=>p[k[1]]),k[2],k[3],k[4]);
@@ -268,22 +282,59 @@ draw(kinds[0]);
 }
 dclose.onclick=()=>{dlg.style.display='none'};
 dlg.addEventListener('click',ev=>{if(ev.target===dlg)dlg.style.display='none'});
-document.addEventListener('keydown',ev=>{if(ev.key==='Escape')dlg.style.display='none'});
 
-${admin ? `add.onclick=async()=>{
-const name=prompt('服务器备注名（可留空）:','');
-if(name===null)return;
-const r=await fetch('/api/servers',{method:'POST',headers:{'content-type':'application/json'},
-body:JSON.stringify({name})});
+// ---------- 添加 / 编辑表单弹窗 ----------
+let editing=null; // null = 添加模式，否则为服务器对象
+
+function openForm(s){
+editing=s||null;
+ftitle.textContent=s?('编辑 — '+(s.name||s.id.slice(0,8))):'添加服务器';
+document.getElementById('f-name').value=s?(s.name||''):'';
+document.getElementById('f-price').value=s?(s.price||''):'';
+document.getElementById('f-exp').value=s&&s.expire_at
+  ?new Date(s.expire_at*1000).toISOString().slice(0,10):'';
+sform.style.display='';
+document.getElementById('f-done').style.display='none';
+fdlg.style.display='grid';
+document.getElementById('f-name').focus();
+}
+fclose.onclick=()=>{fdlg.style.display='none'};
+fdlg.addEventListener('click',ev=>{if(ev.target===fdlg)fdlg.style.display='none'});
+document.addEventListener('keydown',ev=>{
+if(ev.key==='Escape'){dlg.style.display='none';fdlg.style.display='none'}
+});
+
+sform.onsubmit=async ev=>{
+ev.preventDefault();
+const name=document.getElementById('f-name').value.trim();
+const price=document.getElementById('f-price').value.trim();
+const exp=document.getElementById('f-exp').value;
+let expire_at=0;
+if(exp){
+const dd=new Date(exp+'T23:59:59Z');
+if(isNaN(dd)){alert('日期格式不对');return}
+expire_at=Math.floor(dd.getTime()/1000);
+}
+if(editing){
+await fetch('/api/servers/'+editing.id,{method:'PATCH',
+headers:{'content-type':'application/json'},
+body:JSON.stringify({name,price,expire_at})});
+fdlg.style.display='none';load();
+}else{
+const r=await fetch('/api/servers',{method:'POST',
+headers:{'content-type':'application/json'},body:JSON.stringify({name})});
 const d=await r.json();
-const box=document.createElement('div');
-box.innerHTML='<p style="margin-bottom:10px">在该 VPS 上执行一键安装：</p>'
-+'<pre class="cmd">bash <(curl -fsSL '+location.origin+'/agent.sh) '+location.origin+' '+d.id+' '+d.token+'</pre>';
-dlg.style.display='grid';dname.textContent='ADDED';
-dtabs.innerHTML='';dbody.innerHTML='';dbody.appendChild(box);
-dclose.focus();
-};` : `login.onclick=async()=>{
-const t=prompt('输入 ADMIN_TOKEN:');
+document.getElementById('f-cmd').textContent=
+'bash <(curl -fsSL '+location.origin+'/agent.sh) '+location.origin+' '+d.id+' '+d.token;
+sform.style.display='none';
+document.getElementById('f-done').style.display='';
+load();
+}
+};
+document.getElementById('f-ok').onclick=()=>{fdlg.style.display='none'};
+
+${admin ? 'add.onclick=()=>openForm(null);' : `login.onclick=async()=>{
+const t=prompt('输入管理令牌:');
 if(t===null)return;
 const r=await fetch('/api/login',{method:'POST',headers:{'content-type':'application/json'},
 body:JSON.stringify({token:t})});
@@ -294,7 +345,7 @@ load();
 setInterval(load,REFRESH*1000);
 setInterval(()=>{
 if(countdown>0)countdown--;
-tick.textContent=countdown>0?('NEXT REFRESH '+countdown+'S'):'REFRESHING…';
+tick.textContent=countdown>0?(countdown+' 秒后刷新'):'正在刷新…';
 },1000);
 </script></body></html>`;
 }
