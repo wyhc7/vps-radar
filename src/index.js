@@ -158,9 +158,11 @@ async function handleReport(req, env) {
   const v = {};
   for (const f of NUM_FIELDS) v[f] = Number(body[f]) || 0;
 
-  // 顺带更新名称/系统/IP/位置（agent 每次上报都带）
+  // 顺带更新系统/IP/位置；备注名只在为空时采用主机名，用户改过后不再覆盖
   await env.DB.batch([
-    env.DB.prepare('UPDATE servers SET name = ?, os = ?, ip = ?, country = ?, city = ? WHERE id = ?')
+    env.DB.prepare(`UPDATE servers SET
+        name = CASE WHEN name = '' THEN ? ELSE name END,
+        os = ?, ip = ?, country = ?, city = ? WHERE id = ?`)
       .bind(String(body.name || '').slice(0, 64), String(body.os || '').slice(0, 64),
         String(body.ip || '').slice(0, 64), country, city, id),
     env.DB.prepare(`INSERT INTO metrics (server_id, ts, cpu, load1, mem_total, mem_used,
