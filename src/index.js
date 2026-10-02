@@ -60,6 +60,8 @@ async function ensureSchema(env) {
     'ALTER TABLE servers ADD COLUMN alert_offline INTEGER NOT NULL DEFAULT 0',
     'ALTER TABLE servers ADD COLUMN notified_7d INTEGER NOT NULL DEFAULT 0',
     'ALTER TABLE servers ADD COLUMN notified_3d INTEGER NOT NULL DEFAULT 0',
+    "ALTER TABLE servers ADD COLUMN country TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE servers ADD COLUMN city TEXT NOT NULL DEFAULT ''",
   ];
   for (const sql of alters) {
     try { await env.DB.prepare(sql).run(); } catch { /* 列已存在 */ }
@@ -148,15 +150,19 @@ async function handleReport(req, env) {
   if (!srv) return json({ error: 'unknown server' }, 404);
   if (bearer(req) !== srv.token) return json({ error: 'unauthorized' }, 401);
 
+  // Cloudflare 边缘节点自带上报来源的地理位置，直接取，无需第三方查询
+  const country = String(req.cf?.country || '').slice(0, 8);
+  const city = String(req.cf?.city || '').slice(0, 64);
+
   const ts = now();
   const v = {};
   for (const f of NUM_FIELDS) v[f] = Number(body[f]) || 0;
 
-  // 顺带更新名称/系统/IP（agent 每次上报都带）
+  // 顺带更新名称/系统/IP/位置（agent 每次上报都带）
   await env.DB.batch([
-    env.DB.prepare('UPDATE servers SET name = ?, os = ?, ip = ? WHERE id = ?')
+    env.DB.prepare('UPDATE servers SET name = ?, os = ?, ip = ?, country = ?, city = ? WHERE id = ?')
       .bind(String(body.name || '').slice(0, 64), String(body.os || '').slice(0, 64),
-        String(body.ip || '').slice(0, 64), id),
+        String(body.ip || '').slice(0, 64), country, city, id),
     env.DB.prepare(`INSERT INTO metrics (server_id, ts, cpu, load1, mem_total, mem_used,
         swap_total, swap_used, disk_total, disk_used, net_rx, net_tx, uptime)
       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`)
@@ -180,7 +186,7 @@ async function handleReport(req, env) {
 async function handleList(env) {
   const offline = Number(env.OFFLINE_AFTER || 120);
   const { results } = await env.DB.prepare(`
-    SELECT s.id, s.name, s.os, s.ip, s.price, s.expire_at, l.*
+    SELECT s.id, s.name, s.os, s.ip, s.price, s.expire_at, s.country, s.city, l.*
     FROM servers s JOIN latest l ON l.server_id = s.id
     ORDER BY s.name`).all();
   const t = now();

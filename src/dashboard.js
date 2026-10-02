@@ -186,6 +186,18 @@ const pct=(a,b)=>b?Math.min(100,a/b*100):0;
 const cls=p=>p<60?'':p<85?'warn':'crit';
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 
+// 常见国家代码 → 中文名，未收录的显示原代码
+const CC={CN:'中国',HK:'香港',TW:'台湾',MO:'澳门',JP:'日本',KR:'韩国',SG:'新加坡',MY:'马来西亚',
+TH:'泰国',VN:'越南',PH:'菲律宾',ID:'印尼',IN:'印度',US:'美国',CA:'加拿大',MX:'墨西哥',BR:'巴西',
+AR:'阿根廷',GB:'英国',DE:'德国',FR:'法国',NL:'荷兰',IT:'意大利',ES:'西班牙',SE:'瑞典',NO:'挪威',
+FI:'芬兰',DK:'丹麦',PL:'波兰',CZ:'捷克',AT:'奥地利',CH:'瑞士',BE:'比利时',IE:'爱尔兰',PT:'葡萄牙',
+RU:'俄罗斯',UA:'乌克兰',TR:'土耳其',AU:'澳大利亚',NZ:'新西兰',ZA:'南非',EG:'埃及',AE:'阿联酋',
+SA:'沙特',IL:'以色列',PK:'巴基斯坦',CL:'智利',CO:'哥伦比亚',PE:'秘鲁'};
+const loc=s=>{
+  const c=s.country?(CC[s.country]||s.country):'';
+  return c?(s.city?c+' · '+s.city:c):'';
+};
+
 function spark(cv,data,lo,hi,stroke){
 const dpr=devicePixelRatio||1,w=cv.clientWidth,h=cv.clientHeight;
 cv.width=w*dpr;cv.height=h*dpr;const c=cv.getContext('2d');c.scale(dpr,dpr);
@@ -216,7 +228,7 @@ return '<article class="card'+(s.online?'':' down')+'" data-id="'+s.id+'" tabind
 +'<div class="top"><span class="status '+(s.online?'up':'dn')+'">'+(s.online?'● 在线':'● 离线')
 +'</span><span class="up mono">'+t+'</span></div>'
 +'<div class="name">'+esc(s.name||s.id.slice(0,8))+'</div>'
-+'<div class="meta">'+esc(s.os||'-')+' / '+esc(s.ip||'-')+' / 运行 '+fmtUp(s.uptime)+'</div>'
++'<div class="meta">'+esc(s.os||'-')+' / '+esc(s.ip||'-')+(loc(s)?' / '+esc(loc(s)):'')+' / 运行 '+fmtUp(s.uptime)+'</div>'
 +info
 +'<div class="kv"><span>处理器</span><b>'+s.cpu.toFixed(1)+'% · 负载 '+s.load1.toFixed(2)+'</b></div>'
 +'<div class="bar" role="img" aria-label="处理器 '+s.cpu.toFixed(0)+'%"><i class="'+cls(s.cpu)+'" style="width:'+s.cpu+'%"></i></div>'
