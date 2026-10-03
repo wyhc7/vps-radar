@@ -326,6 +326,12 @@ export default {
       return json({ error: 'bad token' }, 401);
     }
 
+    if (p === '/api/logout' && req.method === 'POST') {
+      return json({ ok: true }, 200, {
+        'set-cookie': 'vm_auth=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0',
+      });
+    }
+
     if (p === '/api/servers' && req.method === 'GET') {
       const pub = env.PUBLIC_DASHBOARD === '1';
       const adm = isAdmin(req, env, url);

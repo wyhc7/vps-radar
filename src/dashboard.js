@@ -158,7 +158,7 @@ ${dlgCss}
 <span id="stat" class="mono" aria-live="polite">…</span>
 <span id="tick" class="mono"></span>
 <span class="sp"></span>
-${admin ? '<button id="add" class="primary">+ 添加服务器</button>' : '<button id="login">登录管理</button>'}
+${admin ? '<button id="add" class="primary">+ 添加服务器</button> <button id="logout">退出登录</button>' : '<button id="login">登录管理</button>'}
 </header>
 <main id="grid"><div class="empty">加载中…</div></main>
 <h2 class="sec">网站监控 ${admin ? '<button id="addsite">+ 添加网站</button>' : ''}</h2>
@@ -435,7 +435,7 @@ load();
 };
 document.getElementById('f-ok').onclick=()=>{fdlg.style.display='none'};
 
-${admin ? 'add.onclick=()=>openForm(null);addsite.onclick=()=>{gform.reset();gdlg.style.display="grid";document.getElementById("g-url").focus()};' : `login.onclick=async()=>{
+${admin ? 'add.onclick=()=>openForm(null);addsite.onclick=()=>{gform.reset();gdlg.style.display="grid";document.getElementById("g-url").focus()};logout.onclick=async()=>{await fetch("/api/logout",{method:"POST"});location.reload()};' : `login.onclick=async()=>{
 const t=prompt('输入管理令牌:');
 if(t===null)return;
 const r=await fetch('/api/login',{method:'POST',headers:{'content-type':'application/json'},
