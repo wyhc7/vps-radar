@@ -342,13 +342,21 @@ open();
 async function openSiteDetail(s){
 if(!s)return;
 dname.textContent=(s.name||s.url)+' — 24 小时延迟';
-dbody.innerHTML='<canvas id="dchart"></canvas>';
-const chart=dbody.firstChild;
+dbody.innerHTML='<div id="dstats" class="kv" style="margin:0 0 8px"></div><canvas id="dchart"></canvas>';
+const chart=dbody.querySelector('#dchart');
+const stats=document.getElementById('dstats');
 dlg.style.display='grid';
 dclose.focus();
 dtabs.innerHTML='';
 const r=await fetch('/api/site-history/'+s.id);const d=await r.json();
-spark(chart,d.points.filter(p=>p.ok===1).map(p=>p.latency),0,null,'#0000EE');
+const vals=d.points.filter(p=>p.ok===1).map(p=>p.latency);
+spark(chart,vals,0,null,'#0000EE');
+if(vals.length){
+const last=vals[vals.length-1],max=Math.max(...vals),
+avg=vals.reduce((a,b)=>a+b,0)/vals.length;
+stats.innerHTML='<span>延迟</span><b>当前 '+last+'ms · 平均 '+Math.round(avg)
++'ms · 峰值 '+max+'ms</b>';
+}else{stats.innerHTML='<span>延迟</span><b>暂无数据</b>'}
 }
 
 gclose.onclick=()=>{gdlg.style.display='none'};
@@ -365,15 +373,28 @@ gdlg.style.display='none';gform.reset();loadSites();
 
 async function openDetail(s){
 dname.textContent=s.name||s.id;
-dbody.innerHTML='<canvas id="dchart"></canvas>';
-const chart=dbody.firstChild;
+dbody.innerHTML='<div id="dstats" class="kv" style="margin:0 0 8px"></div><canvas id="dchart"></canvas>';
+const chart=dbody.querySelector('#dchart');
+const stats=document.getElementById('dstats');
 dlg.style.display='grid';
 dclose.focus();
-const kinds=[['处理器 %','cpu',0,100,'#0000EE'],['内存占用','mem_used',null,null,'#000000'],
-['下载速度','net_rx',null,null,'#0A7C00'],['上传速度','net_tx',null,null,'#FF2D00']];
+// 每种指标带格式化函数，统计行才有单位
+const kinds=[
+['处理器 %','cpu',0,100,'#0000EE',v=>v.toFixed(1)+'%'],
+['内存占用','mem_used',null,null,'#000000',v=>fmtB(v)],
+['下载速度','net_rx',null,null,'#0A7C00',v=>fmtB(v)+'/s'],
+['上传速度','net_tx',null,null,'#FF2D00',v=>fmtB(v)+'/s']];
 dtabs.innerHTML='';
 const r=await fetch('/api/history/'+s.id+'?hours=24');const d=await r.json();
-const draw=k=>spark(chart,d.points.map(p=>p[k[1]]),k[2],k[3],k[4]);
+const draw=k=>{
+const vals=d.points.map(p=>p[k[1]]);
+spark(chart,vals,k[2],k[3],k[4]);
+if(vals.length){
+const last=vals[vals.length-1],max=Math.max(...vals),
+avg=vals.reduce((a,b)=>a+b,0)/vals.length;
+stats.innerHTML='<span>'+k[0]+'</span><b>当前 '+k[5](last)+' · 平均 '+k[5](avg)+' · 峰值 '+k[5](max)+'</b>';
+}else{stats.innerHTML='<span>'+k[0]+'</span><b>暂无数据</b>'}
+};
 kinds.forEach((k,i)=>{
 const b=document.createElement('button');b.textContent=k[0];if(i===0)b.className='on';
 b.onclick=()=>{dtabs.querySelectorAll('button').forEach(x=>x.className='');b.className='on';draw(k)};
