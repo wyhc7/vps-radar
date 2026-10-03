@@ -63,6 +63,13 @@ async function ensureSchema(env) {
     "ALTER TABLE servers ADD COLUMN country TEXT NOT NULL DEFAULT ''",
     "ALTER TABLE servers ADD COLUMN city TEXT NOT NULL DEFAULT ''",
     'ALTER TABLE latest ADD COLUMN meta_ts INTEGER NOT NULL DEFAULT 0',
+    `CREATE TABLE IF NOT EXISTS sites (
+      id TEXT PRIMARY KEY, name TEXT NOT NULL DEFAULT '', url TEXT NOT NULL,
+      alert_down INTEGER NOT NULL DEFAULT 0, created_at INTEGER NOT NULL)`,
+    `CREATE TABLE IF NOT EXISTS site_checks (
+      site_id TEXT NOT NULL, ts INTEGER NOT NULL, ok INTEGER NOT NULL DEFAULT 0,
+      status INTEGER NOT NULL DEFAULT 0, latency INTEGER NOT NULL DEFAULT 0,
+      PRIMARY KEY (site_id, ts))`,
   ];
   for (const sql of alters) {
     try { await env.DB.prepare(sql).run(); } catch { /* 列已存在 */ }
@@ -251,9 +258,54 @@ async function handleDelete(env, id) {
   return json({ ok: true });
 }
 
+// 每分钟探测一次所有监控站点：HTTP 状态 + 延迟，异常/恢复时推送
+async function checkSites(env) {
+  const { results: sites } = await env.DB.prepare(
+    'SELECT id, name, url, alert_down FROM sites').all();
+  if (!sites.length) return;
+  const t = now();
+
+  const results = await Promise.all(sites.map(async s => {
+    const start = Date.now();
+    let ok = 0, status = 0;
+    try {
+      const r = await fetch(s.url, {
+        method: 'GET',
+        redirect: 'follow',
+        signal: AbortSignal.timeout(8000),
+        headers: { 'user-agent': 'vps-radar-monitor/1.0' },
+      });
+      status = r.status;
+      ok = status < 500 ? 1 : 0; // 4xx 视为站点本身在线
+      r.body?.cancel?.();
+    } catch { /* 超时/连接失败 */ }
+    return { s, ok, status, latency: Date.now() - start };
+  }));
+
+  const stmts = [];
+  for (const { s, ok, status, latency } of results) {
+    const label = s.name || s.url;
+    stmts.push(env.DB.prepare(
+      'INSERT INTO site_checks (site_id, ts, ok, status, latency) VALUES (?,?,?,?,?)')
+      .bind(s.id, t, ok, status, latency));
+    if (!ok && !s.alert_down) {
+      await notify(env, `🔴 站点异常：${label} ${status ? 'HTTP ' + status : '连接失败/超时'}（${s.url}）`);
+      stmts.push(env.DB.prepare('UPDATE sites SET alert_down = 1 WHERE id = ?').bind(s.id));
+    } else if (ok && s.alert_down) {
+      await notify(env, `🟢 站点恢复：${label} 已恢复访问（${latency}ms）`);
+      stmts.push(env.DB.prepare('UPDATE sites SET alert_down = 0 WHERE id = ?').bind(s.id));
+    }
+  }
+  await env.DB.batch(stmts);
+}
+
 async function purgeOld(env) {
   const days = Number(env.RETENTION_DAYS || 30);
-  await env.DB.prepare('DELETE FROM metrics WHERE ts < ?').bind(now() - days * 86400).run();
+  const cutoff = now() - days * 86400;
+  await env.DB.batch([
+    env.DB.prepare('DELETE FROM metrics WHERE ts < ?').bind(cutoff),
+    env.DB.prepare('DELETE FROM site_checks WHERE ts < ?').bind(cutoff),
+  ]);
 }
 
 export default {
@@ -286,6 +338,49 @@ export default {
       const pub = env.PUBLIC_DASHBOARD === '1';
       if (!pub && !isAdmin(req, env, url)) return json({ error: 'unauthorized' }, 401);
       return handleHistory(env, hm[1], url);
+    }
+
+    // 网站监控：列表 / 添加 / 删除 / 延迟历史
+    if (p === '/api/sites' && req.method === 'GET') {
+      const pub = env.PUBLIC_DASHBOARD === '1';
+      if (!pub && !isAdmin(req, env, url)) return json({ error: 'unauthorized' }, 401);
+      const { results } = await env.DB.prepare(`
+        SELECT s.id, s.name, s.url, s.created_at,
+          (SELECT ok FROM site_checks c WHERE c.site_id = s.id ORDER BY ts DESC LIMIT 1) AS ok,
+          (SELECT status FROM site_checks c WHERE c.site_id = s.id ORDER BY ts DESC LIMIT 1) AS status,
+          (SELECT latency FROM site_checks c WHERE c.site_id = s.id ORDER BY ts DESC LIMIT 1) AS latency,
+          (SELECT ts FROM site_checks c WHERE c.site_id = s.id ORDER BY ts DESC LIMIT 1) AS checked_at
+        FROM sites s ORDER BY s.created_at`).all();
+      return json({ sites: results });
+    }
+    if (p === '/api/sites' && req.method === 'POST') {
+      if (!isAdmin(req, env, url)) return json({ error: 'unauthorized' }, 401);
+      const body = await req.json().catch(() => ({}));
+      const siteUrl = String(body.url || '').trim();
+      if (!/^https?:\/\/.+/.test(siteUrl)) return json({ error: 'bad url' }, 400);
+      const id = uid();
+      await env.DB.prepare('INSERT INTO sites (id, name, url, created_at) VALUES (?,?,?,?)')
+        .bind(id, String(body.name || '').slice(0, 64), siteUrl.slice(0, 256), now()).run();
+      return json({ id });
+    }
+    const sm = p.match(/^\/api\/sites\/([a-f0-9]{32})$/);
+    if (sm && req.method === 'DELETE') {
+      if (!isAdmin(req, env, url)) return json({ error: 'unauthorized' }, 401);
+      await env.DB.batch([
+        env.DB.prepare('DELETE FROM sites WHERE id = ?').bind(sm[1]),
+        env.DB.prepare('DELETE FROM site_checks WHERE site_id = ?').bind(sm[1]),
+      ]);
+      return json({ ok: true });
+    }
+    const sh = p.match(/^\/api\/site-history\/([a-f0-9]{32})$/);
+    if (sh && req.method === 'GET') {
+      const pub = env.PUBLIC_DASHBOARD === '1';
+      if (!pub && !isAdmin(req, env, url)) return json({ error: 'unauthorized' }, 401);
+      const since = now() - 86400;
+      const { results } = await env.DB.prepare(`
+        SELECT ts, ok, status, latency FROM site_checks
+        WHERE site_id = ? AND ts >= ? ORDER BY ts`).bind(sh[1], since).all();
+      return json({ points: results });
     }
 
     // 管理接口：创建/删除/改名单
@@ -336,6 +431,7 @@ export default {
   async scheduled(_evt, env) {
     await ensureSchema(env);
     await checkAlerts(env);
+    await checkSites(env);
     const d = new Date();
     if (d.getUTCHours() === 0 && d.getUTCMinutes() === 0) await purgeOld(env);
   },

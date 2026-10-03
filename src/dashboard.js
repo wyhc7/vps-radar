@@ -128,6 +128,21 @@ font-family:"Space Mono",monospace;font-size:12px;margin-bottom:3px}
 #dchart{width:100%;height:170px;display:block;border:3px solid var(--ink)}
 .empty{grid-column:1/-1;text-align:center;padding:80px 20px;
 font-family:"Archivo Black","PingFang SC","Microsoft YaHei",sans-serif;font-size:24px}
+.sec{font-family:"Archivo Black","PingFang SC","Microsoft YaHei",sans-serif;font-size:20px;
+padding:8px 20px 0;display:flex;align-items:center;gap:14px}
+.sec button{font-size:12px;min-height:40px;padding:6px 12px}
+#sites{padding:16px 20px 32px;display:grid;gap:14px;
+grid-template-columns:repeat(auto-fill,minmax(min(320px,100%),1fr))}
+.site{background:var(--bg);border:3px solid var(--ink);box-shadow:6px 6px 0 var(--ink);
+padding:12px 16px;cursor:pointer;position:relative}
+.site:focus-visible{outline:3px solid var(--link);outline-offset:2px}
+.site.down{background:var(--paper);border-color:var(--hot);box-shadow:6px 6px 0 var(--hot)}
+.site .sname{font-weight:700;font-size:15px;word-break:break-all}
+.site .surl{font-family:"Space Mono",monospace;font-size:11px;color:#333;word-break:break-all}
+.site .srow{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:6px;
+font-family:"Space Mono",monospace;font-size:12px}
+.site .sdel{position:absolute;top:8px;right:8px;font-size:11px;min-height:32px;
+padding:2px 10px;box-shadow:3px 3px 0 var(--ink)}
 .form-btns{display:flex;gap:12px}
 .form-btns button{flex:1}
 .hint{font-size:12px;color:#555;margin:-10px 0 16px}
@@ -146,6 +161,20 @@ ${dlgCss}
 ${admin ? '<button id="add" class="primary">+ 添加服务器</button>' : '<button id="login">登录管理</button>'}
 </header>
 <main id="grid"><div class="empty">加载中…</div></main>
+<h2 class="sec">网站监控 ${admin ? '<button id="addsite">+ 添加网站</button>' : ''}</h2>
+<div id="sites"></div>
+
+<div id="gdlg" class="dlg" role="dialog" aria-modal="true" aria-labelledby="gtitle">
+<div class="box"><div class="row"><b id="gtitle" class="dlg-title">添加网站</b>
+<button id="gclose">✕ 关闭</button></div>
+<form id="gform">
+<label for="g-name">备注名</label>
+<input id="g-name" maxlength="64" placeholder="例如：博客">
+<label for="g-url">监控地址</label>
+<input id="g-url" type="url" required placeholder="https://example.com">
+<div class="hint">每分钟从 Cloudflare 边缘节点探测一次；HTTP 状态码 &lt;500 视为正常</div>
+<div class="form-btns"><button type="submit" class="primary">保存</button></div>
+</form></div></div>
 
 <div id="dlg" class="dlg" role="dialog" aria-modal="true" aria-labelledby="dname">
 <div class="box"><div class="row"><b id="dname" class="dlg-title"></b>
@@ -272,7 +301,67 @@ open();
 });
 });
 countdown=REFRESH;
+loadSites();
 }
+
+// ---------- 网站监控 ----------
+async function loadSites(){
+const r=await fetch('/api/sites');
+if(!r.ok)return;
+const d=await r.json();
+const box=document.getElementById('sites');
+if(!d.sites.length){box.innerHTML='';return}
+box.innerHTML=d.sites.map(s=>{
+const on=s.ok===1,none=s.ok===null;
+const badge=none?'<span class="status">待探测</span>'
+:on?'<span class="status up">正常</span>':'<span class="status dn">异常</span>';
+const lat=none?'-':(s.latency+'ms');
+const stat=none?'':(s.status?'HTTP '+s.status:'连接失败');
+const t=s.checked_at?new Date(s.checked_at*1000).toLocaleTimeString('zh-CN',{hour12:false}):'-';
+return '<div class="site'+(on||none?'':' down')+'" data-id="'+s.id+'" tabindex="0" role="button"'
++' aria-label="'+esc(s.name||s.url)+'">'
++(ADMIN?'<button class="sdel hot">删除</button>':'')
++'<div class="sname">'+esc(s.name||s.url)+'</div>'
++'<div class="surl">'+esc(s.url)+'</div>'
++'<div class="srow"><span>'+badge+' '+stat+'</span><b>'+lat+'</b><span>'+t+'</span></div>'
++'</div>';
+}).join('');
+box.querySelectorAll('.site').forEach(el=>{
+const open=()=>openSiteDetail(d.sites.find(x=>x.id===el.dataset.id));
+el.addEventListener('keydown',ev=>{if(ev.key==='Enter'&&ev.target===el)open()});
+el.addEventListener('click',async ev=>{
+if(ev.target.classList.contains('sdel')){
+if(!confirm('删除该监控站点及其历史？'))return;
+await fetch('/api/sites/'+el.dataset.id,{method:'DELETE'});loadSites();return;
+}
+open();
+});
+});
+}
+
+async function openSiteDetail(s){
+if(!s)return;
+dname.textContent=(s.name||s.url)+' — 24 小时延迟';
+dbody.innerHTML='<canvas id="dchart"></canvas>';
+const chart=dbody.firstChild;
+dlg.style.display='grid';
+dclose.focus();
+dtabs.innerHTML='';
+const r=await fetch('/api/site-history/'+s.id);const d=await r.json();
+spark(chart,d.points.filter(p=>p.ok===1).map(p=>p.latency),0,null,'#0000EE');
+}
+
+gclose.onclick=()=>{gdlg.style.display='none'};
+gdlg.addEventListener('click',ev=>{if(ev.target===gdlg)gdlg.style.display='none'});
+gform.onsubmit=async ev=>{
+ev.preventDefault();
+const name=document.getElementById('g-name').value.trim();
+const url=document.getElementById('g-url').value.trim();
+const r=await fetch('/api/sites',{method:'POST',
+headers:{'content-type':'application/json'},body:JSON.stringify({name,url})});
+if(!r.ok){alert('地址格式不对，需以 http:// 或 https:// 开头');return}
+gdlg.style.display='none';gform.reset();loadSites();
+};
 
 async function openDetail(s){
 dname.textContent=s.name||s.id;
@@ -313,7 +402,7 @@ document.getElementById('f-name').focus();
 fclose.onclick=()=>{fdlg.style.display='none'};
 fdlg.addEventListener('click',ev=>{if(ev.target===fdlg)fdlg.style.display='none'});
 document.addEventListener('keydown',ev=>{
-if(ev.key==='Escape'){dlg.style.display='none';fdlg.style.display='none'}
+if(ev.key==='Escape'){dlg.style.display='none';fdlg.style.display='none';gdlg.style.display='none'}
 });
 
 sform.onsubmit=async ev=>{
@@ -346,7 +435,7 @@ load();
 };
 document.getElementById('f-ok').onclick=()=>{fdlg.style.display='none'};
 
-${admin ? 'add.onclick=()=>openForm(null);' : `login.onclick=async()=>{
+${admin ? 'add.onclick=()=>openForm(null);addsite.onclick=()=>{gform.reset();gdlg.style.display="grid";document.getElementById("g-url").focus()};' : `login.onclick=async()=>{
 const t=prompt('输入管理令牌:');
 if(t===null)return;
 const r=await fetch('/api/login',{method:'POST',headers:{'content-type':'application/json'},

@@ -79,6 +79,7 @@
 - 仪表盘：CPU / 内存 / 磁盘 / 实时网速 / 累计流量 / 在线状态，10 秒自动刷新
 - 点击任意机器查看 24 小时历史曲线（CPU、内存、上下行流量）
 - **预警通知**：机器离线/恢复时推送 Telegram 或 Bark（iOS）通知
+- **网站监控**：每分钟从 Cloudflare 边缘节点探测任意 URL 的连通性与延迟，异常/恢复推送，带 24 小时延迟曲线
 - **到期提醒**：给每台机器设置到期日期后，前 7 天和前 3 天各推送一次提醒
 - **价格展示**：卡片上直接显示每台机器的价格和到期倒计时
 - 探针：纯 bash + /proc，systemd 常驻，资源占用可忽略
@@ -109,6 +110,10 @@
 | POST | `/api/servers` | Admin | 创建机器，返回 id+token |
 | DELETE | `/api/servers/:id` | Admin | 删除机器及历史 |
 | PATCH | `/api/servers/:id` | Admin | 编辑 `{name, price, expire_at}` |
+| POST | `/api/sites` | Admin | 添加监控站点 `{name, url}` |
+| GET | `/api/sites` | 视配置 | 站点列表及最近一次探测结果 |
+| GET | `/api/site-history/:id` | 视配置 | 站点 24h 延迟历史 |
+| DELETE | `/api/sites/:id` | Admin | 删除站点及历史 |
 | POST | `/api/login` | — | `{token}` 换取管理 cookie |
 
 ## 电脑手动部署（可选）

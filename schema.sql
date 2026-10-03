@@ -53,3 +53,21 @@ CREATE TABLE IF NOT EXISTS latest (
 );
 
 CREATE INDEX IF NOT EXISTS idx_metrics_ts ON metrics (ts);
+
+-- 网站监控：目标与每次探测结果
+CREATE TABLE IF NOT EXISTS sites (
+  id         TEXT PRIMARY KEY,
+  name       TEXT NOT NULL DEFAULT '',
+  url        TEXT NOT NULL,
+  alert_down INTEGER NOT NULL DEFAULT 0,
+  created_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS site_checks (
+  site_id TEXT NOT NULL,
+  ts      INTEGER NOT NULL,
+  ok      INTEGER NOT NULL DEFAULT 0,
+  status  INTEGER NOT NULL DEFAULT 0,  -- HTTP 状态码，0 = 连接失败
+  latency INTEGER NOT NULL DEFAULT 0,  -- 毫秒
+  PRIMARY KEY (site_id, ts)
+);
