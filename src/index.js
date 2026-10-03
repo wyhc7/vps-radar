@@ -107,7 +107,7 @@ async function checkAlerts(env) {
   const offlineAfter = Number(env.OFFLINE_AFTER || 120);
   const t = now();
   const { results: servers } = await env.DB.prepare(
-    'SELECT id, name, expire_at, alert_offline, notified_7d, notified_3d FROM servers').all();
+    'SELECT id, name, expire_at, alert_offline, notified_7d, notified_3d, created_at FROM servers').all();
   const { results: latest } = await env.DB.prepare('SELECT server_id, ts FROM latest').all();
   const lastTs = Object.fromEntries(latest.map(r => [r.server_id, r.ts]));
 
@@ -115,7 +115,8 @@ async function checkAlerts(env) {
   for (const s of servers) {
     const label = s.name || s.id.slice(0, 8);
     const last = lastTs[s.id] || 0;
-    const isOffline = last > 0 && t - last > offlineAfter;
+    // 从未上报过的机器（装探针失败）超过阈值同样算离线
+    const isOffline = last > 0 ? t - last > offlineAfter : t - s.created_at > offlineAfter;
 
     if (isOffline && !s.alert_offline) {
       await notify(env, `🔴 离线预警：${label} 已超过 ${offlineAfter} 秒未上报`);
@@ -185,7 +186,15 @@ async function handleReport(req, env) {
   return json({ ok: true, ts });
 }
 
-async function handleList(env) {
+// 公开模式下对访客掩码 IP，管理员看完整地址
+const maskIp = ip => {
+  const v4 = ip.match(/^(\d+\.\d+)\.\d+\.\d+$/);
+  if (v4) return v4[1] + '.*.*';
+  const v6 = ip.match(/^([0-9a-fA-F:]+?):/);
+  return v6 ? ip.split(':').slice(0, 3).join(':') + '::*' : ip;
+};
+
+async function handleList(env, mask) {
   const offline = Number(env.OFFLINE_AFTER || 120);
   const { results } = await env.DB.prepare(`
     SELECT s.id, s.name, s.os, s.ip, s.price, s.expire_at, s.country, s.city, l.*
@@ -194,6 +203,7 @@ async function handleList(env) {
   const t = now();
   for (const r of results) {
     r.online = t - r.ts <= offline;
+    if (mask && r.ip) r.ip = maskIp(r.ip);
     delete r.server_id;
   }
   return json({ servers: results, now: t, offline_after: offline });
@@ -213,8 +223,10 @@ async function handleCreate(req, env) {
   const body = await req.json().catch(() => ({}));
   const id = uid();
   const token = crypto.randomUUID() + crypto.randomUUID();
-  await env.DB.prepare('INSERT INTO servers (id, name, token, created_at) VALUES (?,?,?,?)')
-    .bind(id, String(body.name || '').slice(0, 64), token, now()).run();
+  await env.DB.prepare(
+    'INSERT INTO servers (id, name, token, price, expire_at, created_at) VALUES (?,?,?,?,?,?)')
+    .bind(id, String(body.name || '').slice(0, 64), token,
+      String(body.price || '').slice(0, 32), Number(body.expire_at) || 0, now()).run();
   return json({ id, token });
 }
 
@@ -245,7 +257,7 @@ export default {
       const body = await req.json().catch(() => ({}));
       if (env.ADMIN_TOKEN && body.token === env.ADMIN_TOKEN) {
         return json({ ok: true }, 200, {
-          'set-cookie': `vm_auth=${tokenHashSync(env.ADMIN_TOKEN)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=604800`,
+          'set-cookie': `vm_auth=${tokenHashSync(env.ADMIN_TOKEN)}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=604800`,
         });
       }
       return json({ error: 'bad token' }, 401);
@@ -253,8 +265,9 @@ export default {
 
     if (p === '/api/servers' && req.method === 'GET') {
       const pub = env.PUBLIC_DASHBOARD === '1';
-      if (!pub && !isAdmin(req, env, url)) return json({ error: 'unauthorized' }, 401);
-      return handleList(env);
+      const adm = isAdmin(req, env, url);
+      if (!pub && !adm) return json({ error: 'unauthorized' }, 401);
+      return handleList(env, pub && !adm);
     }
 
     const hm = p.match(/^\/api\/history\/([a-f0-9]{32})$/);

@@ -334,7 +334,8 @@ body:JSON.stringify({name,price,expire_at})});
 fdlg.style.display='none';load();
 }else{
 const r=await fetch('/api/servers',{method:'POST',
-headers:{'content-type':'application/json'},body:JSON.stringify({name})});
+headers:{'content-type':'application/json'},
+body:JSON.stringify({name,price,expire_at})});
 const d=await r.json();
 document.getElementById('f-cmd').textContent=
 'bash <(curl -fsSL '+location.origin+'/agent.sh) '+location.origin+' '+d.id+' '+d.token;
