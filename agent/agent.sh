@@ -18,7 +18,7 @@ if [ $# -ge 3 ]; then
 URL="$URL"
 ID="$SID"
 TOKEN="$TOKEN"
-INTERVAL=10
+INTERVAL=30
 EOF
   chmod 600 "$CONF"
   # 本地文件执行时直接复制；管道执行（bash <(curl ...)）时 $0 是已读空的
@@ -52,7 +52,7 @@ fi
 # ---------- 上报模式 ----------
 [ -f "$CONF" ] || { echo "缺少配置 $CONF"; exit 1; }
 . "$CONF"
-INTERVAL="${INTERVAL:-10}"
+INTERVAL="${INTERVAL:-30}"
 
 read_cpu() { read -r _ u n s i w irq si st _ < /proc/stat; echo "$u $n $s $i $w $irq $si $st"; }
 read_net() { awk '/:/{sub(":","",$1); if($1!="lo"){rx+=$2; tx+=$10}} END{print rx, tx}' /proc/net/dev; }

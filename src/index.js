@@ -62,6 +62,7 @@ async function ensureSchema(env) {
     'ALTER TABLE servers ADD COLUMN notified_3d INTEGER NOT NULL DEFAULT 0',
     "ALTER TABLE servers ADD COLUMN country TEXT NOT NULL DEFAULT ''",
     "ALTER TABLE servers ADD COLUMN city TEXT NOT NULL DEFAULT ''",
+    'ALTER TABLE latest ADD COLUMN meta_ts INTEGER NOT NULL DEFAULT 0',
   ];
   for (const sql of alters) {
     try { await env.DB.prepare(sql).run(); } catch { /* 列已存在 */ }
@@ -159,30 +160,40 @@ async function handleReport(req, env) {
   const v = {};
   for (const f of NUM_FIELDS) v[f] = Number(body[f]) || 0;
 
-  // 顺带更新系统/IP/位置；备注名只在为空时采用主机名，用户改过后不再覆盖
-  await env.DB.batch([
-    env.DB.prepare(`UPDATE servers SET
-        name = CASE WHEN name = '' THEN ? ELSE name END,
-        os = ?, ip = ?, country = ?, city = ? WHERE id = ?`)
-      .bind(String(body.name || '').slice(0, 64), String(body.os || '').slice(0, 64),
-        String(body.ip || '').slice(0, 64), country, city, id),
-    env.DB.prepare(`INSERT INTO metrics (server_id, ts, cpu, load1, mem_total, mem_used,
-        swap_total, swap_used, disk_total, disk_used, net_rx, net_tx, uptime)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`)
-      .bind(id, ts, v.cpu, v.load1, v.mem_total, v.mem_used, v.swap_total, v.swap_used,
-        v.disk_total, v.disk_used, v.net_rx, v.net_tx, v.uptime),
+  // 元信息（系统/IP/位置）每小时同步一次就够，省下 2/3 的 D1 写入
+  const META_INTERVAL = 3600;
+  const cur = await env.DB.prepare('SELECT meta_ts FROM latest WHERE server_id = ?').bind(id).first();
+  const syncMeta = !cur || ts - (cur.meta_ts || 0) > META_INTERVAL;
+
+  const stmts = [
     env.DB.prepare(`INSERT INTO latest (server_id, ts, cpu, load1, mem_total, mem_used,
-        swap_total, swap_used, disk_total, disk_used, net_rx, net_tx, uptime, net_rx_total, net_tx_total)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        swap_total, swap_used, disk_total, disk_used, net_rx, net_tx, uptime, net_rx_total, net_tx_total, meta_ts)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
       ON CONFLICT(server_id) DO UPDATE SET
         ts=excluded.ts, cpu=excluded.cpu, load1=excluded.load1, mem_total=excluded.mem_total,
         mem_used=excluded.mem_used, swap_total=excluded.swap_total, swap_used=excluded.swap_used,
         disk_total=excluded.disk_total, disk_used=excluded.disk_used, net_rx=excluded.net_rx,
         net_tx=excluded.net_tx, uptime=excluded.uptime,
-        net_rx_total=excluded.net_rx_total, net_tx_total=excluded.net_tx_total`)
+        net_rx_total=excluded.net_rx_total, net_tx_total=excluded.net_tx_total,
+        meta_ts=excluded.meta_ts`)
       .bind(id, ts, v.cpu, v.load1, v.mem_total, v.mem_used, v.swap_total, v.swap_used,
-        v.disk_total, v.disk_used, v.net_rx, v.net_tx, v.uptime, v.net_rx_total, v.net_tx_total),
-  ]);
+        v.disk_total, v.disk_used, v.net_rx, v.net_tx, v.uptime, v.net_rx_total, v.net_tx_total,
+        syncMeta ? ts : (cur.meta_ts || 0)),
+    env.DB.prepare(`INSERT INTO metrics (server_id, ts, cpu, load1, mem_total, mem_used,
+        swap_total, swap_used, disk_total, disk_used, net_rx, net_tx, uptime)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+      .bind(id, ts, v.cpu, v.load1, v.mem_total, v.mem_used, v.swap_total, v.swap_used,
+        v.disk_total, v.disk_used, v.net_rx, v.net_tx, v.uptime),
+  ];
+  if (syncMeta) {
+    // 备注名只在为空时采用主机名，用户改过后不再覆盖
+    stmts.push(env.DB.prepare(`UPDATE servers SET
+        name = CASE WHEN name = '' THEN ? ELSE name END,
+        os = ?, ip = ?, country = ?, city = ? WHERE id = ?`)
+      .bind(String(body.name || '').slice(0, 64), String(body.os || '').slice(0, 64),
+        String(body.ip || '').slice(0, 64), country, city, id));
+  }
+  await env.DB.batch(stmts);
   return json({ ok: true, ts });
 }
 
@@ -321,10 +332,11 @@ export default {
     return json({ error: 'not found' }, 404);
   },
 
-  // 每分钟 cron：预警检查；整点顺带清理过期历史
+  // 每分钟 cron：预警检查；每天 UTC 0 点清理一次过期历史（删除也计写入量）
   async scheduled(_evt, env) {
     await ensureSchema(env);
     await checkAlerts(env);
-    if (new Date().getUTCMinutes() === 0) await purgeOld(env);
+    const d = new Date();
+    if (d.getUTCHours() === 0 && d.getUTCMinutes() === 0) await purgeOld(env);
   },
 };

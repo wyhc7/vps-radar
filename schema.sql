@@ -48,7 +48,8 @@ CREATE TABLE IF NOT EXISTS latest (
   net_tx    REAL NOT NULL DEFAULT 0,
   uptime    INTEGER NOT NULL DEFAULT 0,
   net_rx_total INTEGER NOT NULL DEFAULT 0,
-  net_tx_total INTEGER NOT NULL DEFAULT 0
+  net_tx_total INTEGER NOT NULL DEFAULT 0,
+  meta_ts   INTEGER NOT NULL DEFAULT 0  -- 上次同步 servers 元信息的时间
 );
 
 CREATE INDEX IF NOT EXISTS idx_metrics_ts ON metrics (ts);
