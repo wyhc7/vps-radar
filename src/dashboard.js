@@ -175,7 +175,7 @@ ${admin ? '<button id="add" class="primary">+ 添加服务器</button>' : '<butt
 
 <script>
 const ADMIN=${admin ? 'true' : 'false'};
-const REFRESH=30; // 秒
+const REFRESH=60; // 秒
 let lastList=null, countdown=REFRESH;
 
 const fmtB=n=>{const u=['B','KB','MB','GB','TB'];let i=0;while(n>=1024&&i<u.length-1){n/=1024;i++}
