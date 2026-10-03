@@ -4,9 +4,9 @@
 
 **免费**：Cloudflare 免费套餐即可跑 10 台以内的 VPS，无需信用卡。
 
-> 写入量说明：默认 30 秒上报一次 ≈ 每台每天 5.8k 行写入（D1 免费额度 10 万行/天）。
-> 想更省可在 VPS 上编辑 `/etc/vps-radar.conf` 把 `INTERVAL` 调到 60 再
-> `systemctl restart vps-radar-agent`；想更实时就调小。
+> 写入量说明：默认 60 秒上报一次 ≈ 每台每天 2.9k 行写入（D1 免费额度 10 万行/天）。
+> 想调整可在 VPS 上编辑 `/etc/vps-radar.conf` 里的 `INTERVAL` 再
+> `systemctl restart vps-radar-agent`。
 
 ## 🚀 一键部署（手机上 5 分钟搞定）
 
